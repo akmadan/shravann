@@ -75,6 +75,27 @@ type Agent struct {
 
 func (Agent) TableName() string { return "agents" }
 
+type AgentParticipant struct {
+	ID                 uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	AgentID            uuid.UUID      `gorm:"type:uuid;not null;index;uniqueIndex:idx_participant_agent_role"`
+	Name               string         `gorm:"type:text;not null"`
+	Role               string         `gorm:"type:text;not null;uniqueIndex:idx_participant_agent_role"`
+	SystemPrompt       string         `gorm:"column:system_prompt;type:text;not null;default:''"`
+	Model              string         `gorm:"type:text;not null;default:gpt-4o"`
+	VoiceProvider      *string        `gorm:"column:voice_provider;type:text"`
+	VoiceID            *string        `gorm:"column:voice_id;type:text"`
+	VoiceConfig        datatypes.JSON `gorm:"column:voice_config;type:jsonb;not null;default:'{}'"`
+	HandoffDescription string         `gorm:"column:handoff_description;type:text;not null;default:''"`
+	IsEntryPoint       bool           `gorm:"column:is_entry_point;not null;default:false"`
+	Position           int            `gorm:"not null;default:0"`
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+
+	Agent Agent `gorm:"foreignKey:AgentID"`
+}
+
+func (AgentParticipant) TableName() string { return "agent_participants" }
+
 type SessionChannel string
 
 const (

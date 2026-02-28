@@ -18,6 +18,10 @@ func Err(w http.ResponseWriter, err error) {
 		JSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
+	if e, ok := err.(*errMsg); ok {
+		JSON(w, e.code, map[string]string{"error": e.msg})
+		return
+	}
 	JSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 }
 

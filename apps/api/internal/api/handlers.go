@@ -8,16 +8,18 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/shravann/api/internal/db"
+	lk "github.com/shravann/api/internal/livekit"
 	"github.com/shravann/api/internal/store"
 	"gorm.io/datatypes"
 )
 
 type Handler struct {
-	store *store.Store
+	store   *store.Store
+	livekit *lk.Client
 }
 
-func NewHandler(s *store.Store) *Handler {
-	return &Handler{store: s}
+func NewHandler(s *store.Store, lkClient *lk.Client) *Handler {
+	return &Handler{store: s, livekit: lkClient}
 }
 
 // --- Users ---
@@ -654,6 +656,252 @@ func (h *Handler) EndSession(w http.ResponseWriter, r *http.Request) {
 	}
 	JSON(w, http.StatusOK, sessionResp(sess))
 }
+
+// --- Agent Participants ---
+
+func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
+	agentID := chi.URLParam(r, "id")
+	var body struct {
+		Name               string  `json:"name"`
+		Role               string  `json:"role"`
+		SystemPrompt       string  `json:"system_prompt"`
+		Model              string  `json:"model"`
+		VoiceProvider      *string `json:"voice_provider"`
+		VoiceID            *string `json:"voice_id"`
+		HandoffDescription string  `json:"handoff_description"`
+		IsEntryPoint       bool    `json:"is_entry_point"`
+		Position           int     `json:"position"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		BadRequest(w, "invalid JSON")
+		return
+	}
+	if body.Name == "" || body.Role == "" {
+		BadRequest(w, "name and role required")
+		return
+	}
+	aid, err := uuid.Parse(agentID)
+	if err != nil {
+		BadRequest(w, "invalid agent id")
+		return
+	}
+	model := body.Model
+	if model == "" {
+		model = "gpt-4o"
+	}
+	p := &db.AgentParticipant{
+		AgentID:            aid,
+		Name:               body.Name,
+		Role:               body.Role,
+		SystemPrompt:       body.SystemPrompt,
+		Model:              model,
+		VoiceProvider:      body.VoiceProvider,
+		VoiceID:            body.VoiceID,
+		HandoffDescription: body.HandoffDescription,
+		IsEntryPoint:       body.IsEntryPoint,
+		Position:           body.Position,
+	}
+	if err := h.store.CreateParticipant(r.Context(), p); err != nil {
+		Err(w, err)
+		return
+	}
+	JSON(w, http.StatusCreated, participantResp(p))
+}
+
+func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
+	agentID := chi.URLParam(r, "id")
+	list, err := h.store.ListParticipantsByAgent(r.Context(), agentID)
+	if err != nil {
+		Err(w, err)
+		return
+	}
+	out := make([]map[string]any, len(list))
+	for i := range list {
+		out[i] = participantResp(&list[i])
+	}
+	JSON(w, http.StatusOK, map[string]any{"participants": out})
+}
+
+func (h *Handler) GetParticipant(w http.ResponseWriter, r *http.Request) {
+	pid := chi.URLParam(r, "pid")
+	p, err := h.store.GetParticipantByID(r.Context(), pid)
+	if err != nil {
+		Err(w, err)
+		return
+	}
+	JSON(w, http.StatusOK, participantResp(p))
+}
+
+func (h *Handler) UpdateParticipant(w http.ResponseWriter, r *http.Request) {
+	pid := chi.URLParam(r, "pid")
+	p, err := h.store.GetParticipantByID(r.Context(), pid)
+	if err != nil {
+		Err(w, err)
+		return
+	}
+	var body struct {
+		Name               *string `json:"name"`
+		Role               *string `json:"role"`
+		SystemPrompt       *string `json:"system_prompt"`
+		Model              *string `json:"model"`
+		VoiceProvider      *string `json:"voice_provider"`
+		VoiceID            *string `json:"voice_id"`
+		HandoffDescription *string `json:"handoff_description"`
+		IsEntryPoint       *bool   `json:"is_entry_point"`
+		Position           *int    `json:"position"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		BadRequest(w, "invalid JSON")
+		return
+	}
+	if body.Name != nil {
+		p.Name = *body.Name
+	}
+	if body.Role != nil {
+		p.Role = *body.Role
+	}
+	if body.SystemPrompt != nil {
+		p.SystemPrompt = *body.SystemPrompt
+	}
+	if body.Model != nil {
+		p.Model = *body.Model
+	}
+	if body.VoiceProvider != nil {
+		p.VoiceProvider = body.VoiceProvider
+	}
+	if body.VoiceID != nil {
+		p.VoiceID = body.VoiceID
+	}
+	if body.HandoffDescription != nil {
+		p.HandoffDescription = *body.HandoffDescription
+	}
+	if body.IsEntryPoint != nil {
+		p.IsEntryPoint = *body.IsEntryPoint
+	}
+	if body.Position != nil {
+		p.Position = *body.Position
+	}
+	if err := h.store.UpdateParticipant(r.Context(), p); err != nil {
+		Err(w, err)
+		return
+	}
+	JSON(w, http.StatusOK, participantResp(p))
+}
+
+func (h *Handler) DeleteParticipant(w http.ResponseWriter, r *http.Request) {
+	pid := chi.URLParam(r, "pid")
+	if err := h.store.DeleteParticipant(r.Context(), pid); err != nil {
+		Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func participantResp(p *db.AgentParticipant) map[string]any {
+	r := map[string]any{
+		"id":                  p.ID.String(),
+		"agent_id":            p.AgentID.String(),
+		"name":                p.Name,
+		"role":                p.Role,
+		"system_prompt":       p.SystemPrompt,
+		"model":               p.Model,
+		"voice_config":        p.VoiceConfig,
+		"handoff_description": p.HandoffDescription,
+		"is_entry_point":      p.IsEntryPoint,
+		"position":            p.Position,
+		"created_at":          p.CreatedAt,
+		"updated_at":          p.UpdatedAt,
+	}
+	if p.VoiceProvider != nil {
+		r["voice_provider"] = *p.VoiceProvider
+	}
+	if p.VoiceID != nil {
+		r["voice_id"] = *p.VoiceID
+	}
+	return r
+}
+
+// --- Session Start (LiveKit) ---
+
+func (h *Handler) StartSession(w http.ResponseWriter, r *http.Request) {
+	agentID := chi.URLParam(r, "id")
+
+	if h.livekit == nil {
+		Err(w, &errMsg{code: http.StatusServiceUnavailable, msg: "LiveKit not configured"})
+		return
+	}
+
+	agent, participants, err := h.store.GetAgentWithParticipants(r.Context(), agentID)
+	if err != nil {
+		Err(w, err)
+		return
+	}
+	if !agent.IsActive {
+		BadRequest(w, "agent is not active")
+		return
+	}
+	if len(participants) == 0 {
+		BadRequest(w, "agent has no participants configured")
+		return
+	}
+	hasEntry := false
+	for _, p := range participants {
+		if p.IsEntryPoint {
+			hasEntry = true
+			break
+		}
+	}
+	if !hasEntry {
+		BadRequest(w, "agent has no entry point participant")
+		return
+	}
+
+	var body struct {
+		Identity string `json:"identity"`
+		Channel  string `json:"channel"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		BadRequest(w, "invalid JSON")
+		return
+	}
+	if body.Identity == "" {
+		body.Identity = "user"
+	}
+	channel := db.ChannelVoice
+	if body.Channel == "chat" {
+		channel = db.ChannelChat
+	}
+
+	roomName, token, err := h.livekit.CreateSessionRoom(r.Context(), agentID, body.Identity)
+	if err != nil {
+		Err(w, err)
+		return
+	}
+
+	sess := &db.Session{
+		AgentID:        agent.ID,
+		ExternalUserID: &body.Identity,
+		Channel:        channel,
+		Status:         db.StatusActive,
+	}
+	if err := h.store.CreateSession(r.Context(), sess); err != nil {
+		Err(w, err)
+		return
+	}
+
+	JSON(w, http.StatusCreated, map[string]any{
+		"session":    sessionResp(sess),
+		"room_name":  roomName,
+		"token":      token,
+	})
+}
+
+type errMsg struct {
+	code int
+	msg  string
+}
+
+func (e *errMsg) Error() string { return e.msg }
 
 func sessionResp(s *db.Session) map[string]any {
 	r := map[string]any{

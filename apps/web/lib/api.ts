@@ -185,6 +185,64 @@ export function deleteAgent(id: string) {
   return request<null>(`/agents/${id}`, { method: "DELETE" });
 }
 
+// --- Participants ---
+
+export function listParticipants(agentId: string) {
+  return request<{ participants: Participant[] }>(
+    `/agents/${agentId}/participants`
+  );
+}
+
+export function createParticipant(
+  agentId: string,
+  data: {
+    name: string;
+    role: string;
+    system_prompt?: string;
+    model?: string;
+    voice_provider?: string;
+    voice_id?: string;
+    handoff_description?: string;
+    is_entry_point?: boolean;
+    position?: number;
+  }
+) {
+  return request<Participant>(`/agents/${agentId}/participants`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateParticipant(
+  agentId: string,
+  participantId: string,
+  data: Partial<{
+    name: string;
+    role: string;
+    system_prompt: string;
+    model: string;
+    voice_provider: string;
+    voice_id: string;
+    handoff_description: string;
+    is_entry_point: boolean;
+    position: number;
+  }>
+) {
+  return request<Participant>(
+    `/agents/${agentId}/participants/${participantId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }
+  );
+}
+
+export function deleteParticipant(agentId: string, participantId: string) {
+  return request<null>(`/agents/${agentId}/participants/${participantId}`, {
+    method: "DELETE",
+  });
+}
+
 // --- Sessions ---
 
 export function listSessions(
@@ -251,6 +309,23 @@ export interface Agent {
   metadata?: Record<string, unknown>;
   is_active: boolean;
   created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Participant {
+  id: string;
+  agent_id: string;
+  name: string;
+  role: string;
+  system_prompt: string;
+  model: string;
+  voice_provider?: string;
+  voice_id?: string;
+  voice_config?: Record<string, unknown>;
+  handoff_description: string;
+  is_entry_point: boolean;
+  position: number;
   created_at: string;
   updated_at: string;
 }

@@ -8,6 +8,10 @@ import (
 type Config struct {
 	Port        int
 	DatabaseURL string
+
+	LiveKitURL       string
+	LiveKitAPIKey    string
+	LiveKitAPISecret string
 }
 
 func Load() Config {
@@ -22,7 +26,10 @@ func Load() Config {
 		dsn = "postgres://postgres@localhost:5432/db_shravann?sslmode=disable"
 	}
 	return Config{
-		Port:        port,
-		DatabaseURL: dsn,
+		Port:             port,
+		DatabaseURL:      dsn,
+		LiveKitURL:       os.Getenv("LIVEKIT_URL"),
+		LiveKitAPIKey:    os.Getenv("LIVEKIT_API_KEY"),
+		LiveKitAPISecret: os.Getenv("LIVEKIT_API_SECRET"),
 	}
 }

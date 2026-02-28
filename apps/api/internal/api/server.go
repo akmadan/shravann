@@ -5,11 +5,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	lk "github.com/shravann/api/internal/livekit"
 	"github.com/shravann/api/internal/store"
 )
 
-func NewServer(s *store.Store) http.Handler {
-	h := NewHandler(s)
+func NewServer(s *store.Store, lkClient *lk.Client) http.Handler {
+	h := NewHandler(s, lkClient)
 	r := chi.NewRouter()
 
 	r.Use(CORS)
@@ -54,8 +55,18 @@ func NewServer(s *store.Store) http.Handler {
 		r.Get("/{id}", h.GetAgent)
 		r.Patch("/{id}", h.UpdateAgent)
 		r.Delete("/{id}", h.DeleteAgent)
+
+		// Participants (sub-agents)
+		r.Get("/{id}/participants", h.ListParticipants)
+		r.Post("/{id}/participants", h.CreateParticipant)
+		r.Get("/{id}/participants/{pid}", h.GetParticipant)
+		r.Patch("/{id}/participants/{pid}", h.UpdateParticipant)
+		r.Delete("/{id}/participants/{pid}", h.DeleteParticipant)
+
+		// Sessions
 		r.Post("/{agentId}/sessions", h.CreateSession)
 		r.Get("/{agentId}/sessions", h.ListSessions)
+		r.Post("/{id}/sessions/start", h.StartSession)
 	})
 
 	r.Route("/sessions", func(r chi.Router) {

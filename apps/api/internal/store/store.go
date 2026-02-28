@@ -211,6 +211,48 @@ func (s *Store) DeleteAgent(ctx context.Context, id string) error {
 	return s.db.WithContext(ctx).Where("id = ?", id).Delete(&db.Agent{}).Error
 }
 
+// --- Agent Participants ---
+
+func (s *Store) CreateParticipant(ctx context.Context, p *db.AgentParticipant) error {
+	return s.db.WithContext(ctx).Create(p).Error
+}
+
+func (s *Store) GetParticipantByID(ctx context.Context, id string) (*db.AgentParticipant, error) {
+	var p db.AgentParticipant
+	err := s.db.WithContext(ctx).Where("id = ?", id).First(&p).Error
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+func (s *Store) ListParticipantsByAgent(ctx context.Context, agentID string) ([]db.AgentParticipant, error) {
+	var list []db.AgentParticipant
+	err := s.db.WithContext(ctx).Where("agent_id = ?", agentID).Order("position ASC, created_at ASC").Find(&list).Error
+	return list, err
+}
+
+func (s *Store) UpdateParticipant(ctx context.Context, p *db.AgentParticipant) error {
+	return s.db.WithContext(ctx).Save(p).Error
+}
+
+func (s *Store) DeleteParticipant(ctx context.Context, id string) error {
+	return s.db.WithContext(ctx).Where("id = ?", id).Delete(&db.AgentParticipant{}).Error
+}
+
+// GetAgentWithParticipants loads an agent and all its participants in one shot (used by worker).
+func (s *Store) GetAgentWithParticipants(ctx context.Context, agentID string) (*db.Agent, []db.AgentParticipant, error) {
+	agent, err := s.GetAgentByID(ctx, agentID)
+	if err != nil {
+		return nil, nil, err
+	}
+	participants, err := s.ListParticipantsByAgent(ctx, agentID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return agent, participants, nil
+}
+
 // --- Sessions ---
 
 func (s *Store) CreateSession(ctx context.Context, sess *db.Session) error {
