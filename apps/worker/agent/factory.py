@@ -5,7 +5,7 @@ from typing import Any
 
 from livekit.agents.llm import function_tool
 from livekit.agents.voice import Agent, RunContext
-from livekit.plugins import cartesia, deepgram, openai
+from livekit.plugins import openai
 
 from .base import BaseAgent, SessionData
 from .db import AgentRow, ParticipantRow
@@ -23,14 +23,8 @@ def get_llm(model: str) -> Any:
 
 
 def get_tts(provider: str | None, voice_id: str | None) -> Any:
-    """Return a TTS instance based on provider."""
-    if provider == "cartesia" and voice_id:
-        return cartesia.TTS(voice=voice_id)
-    if provider == "openai":
-        return openai.TTS()
-    if provider == "deepgram":
-        return deepgram.TTS()
-    return cartesia.TTS()
+    """Return a TTS instance. With Realtime session the pipeline uses OpenAI Realtime (speech-to-speech); this is only used if session does not use Realtime."""
+    return openai.TTS()
 
 
 def _make_handoff_tool(target_role: str, description: str):

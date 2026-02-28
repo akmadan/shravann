@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/joho/godotenv"
 	"github.com/shravann/api/internal/api"
 	"github.com/shravann/api/internal/config"
 	"github.com/shravann/api/internal/db"
@@ -13,6 +14,7 @@ import (
 )
 
 func main() {
+	_ = godotenv.Load()
 	cfg := config.Load()
 
 	gormDB, err := db.New(cfg.DatabaseURL)

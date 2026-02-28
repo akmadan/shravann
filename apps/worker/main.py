@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 from livekit.agents import AgentServer, JobContext, cli
 from livekit.agents.voice import AgentSession
-from livekit.plugins import deepgram, openai, silero, cartesia
+from livekit.plugins import openai
 
 from agent.base import SessionData
 from agent.db import load_agent
@@ -22,6 +22,18 @@ logger = logging.getLogger("shravann.worker")
 server = AgentServer()
 
 
+def _agent_id_from_room(room_name: str) -> str | None:
+    """Parse agent_id from room name. API uses session-{agentID}-{timestamp}."""
+    prefix = "session-"
+    if not room_name.startswith(prefix):
+        return None
+    rest = room_name[len(prefix) :]
+    parts = rest.rsplit("-", 1)
+    if len(parts) != 2 or not parts[1].isdigit():
+        return None
+    return parts[0] or None
+
+
 @server.rtc_session()
 async def entrypoint(ctx: JobContext):
     room_meta = ctx.room.metadata or "{}"
@@ -31,8 +43,10 @@ async def entrypoint(ctx: JobContext):
         meta = {}
 
     agent_id = meta.get("agent_id")
+    if not agent_id and ctx.room.name:
+        agent_id = _agent_id_from_room(ctx.room.name)
     if not agent_id:
-        logger.error("No agent_id in room metadata: %s", room_meta)
+        logger.error("No agent_id in room metadata or room name: metadata=%s room=%s", room_meta, ctx.room.name)
         return
 
     logger.info("session start — agent_id=%s room=%s", agent_id, ctx.room.name)
@@ -50,12 +64,10 @@ async def entrypoint(ctx: JobContext):
 
     userdata = SessionData(agent_id=agent_id, agents=agents)
 
+    # OpenAI Realtime API: speech-to-speech (no separate STT/TTS/Cartesia/Deepgram)
     session = AgentSession[SessionData](
         userdata=userdata,
-        stt=deepgram.STT(),
-        llm=openai.LLM(),
-        tts=cartesia.TTS(),
-        vad=silero.VAD.load(),
+        llm=openai.realtime.RealtimeModel(voice="alloy"),
         max_tool_steps=5,
     )
 
@@ -67,6 +79,8 @@ async def entrypoint(ctx: JobContext):
 
     await session.start(agent=entry, room=ctx.room)
 
+    # Trigger initial greeting so the agent speaks first (user hears something right away)
+    await session.generate_reply(instructions="Greet the user briefly and ask how you can help.")
 
 if __name__ == "__main__":
     cli.run_app(server)

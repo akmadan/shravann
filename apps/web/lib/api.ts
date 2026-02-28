@@ -153,6 +153,7 @@ export function createAgent(
     model?: string;
     voice_provider?: string;
     language?: string;
+    session_start_input_schema?: SessionStartField[];
   },
   userId: string
 ) {
@@ -173,6 +174,7 @@ export function updateAgent(
     voice_provider: string;
     language: string;
     is_active: boolean;
+    session_start_input_schema: SessionStartField[];
   }>
 ) {
   return request<Agent>(`/agents/${id}`, {
@@ -205,6 +207,7 @@ export function createParticipant(
     handoff_description?: string;
     is_entry_point?: boolean;
     position?: number;
+    parent_participant_ids?: string[];
   }
 ) {
   return request<Participant>(`/agents/${agentId}/participants`, {
@@ -226,6 +229,7 @@ export function updateParticipant(
     handoff_description: string;
     is_entry_point: boolean;
     position: number;
+    parent_participant_ids: string[];
   }>
 ) {
   return request<Participant>(
@@ -296,6 +300,13 @@ export interface Member {
   avatar_url?: string;
 }
 
+export interface SessionStartField {
+  key: string;
+  label: string;
+  type?: "string" | "number" | "boolean";
+  required?: boolean;
+}
+
 export interface Agent {
   id: string;
   project_id: string;
@@ -307,6 +318,7 @@ export interface Agent {
   voice_config?: Record<string, unknown>;
   language: string;
   metadata?: Record<string, unknown>;
+  session_start_input_schema?: SessionStartField[];
   is_active: boolean;
   created_by: string;
   created_at: string;
@@ -316,6 +328,7 @@ export interface Agent {
 export interface Participant {
   id: string;
   agent_id: string;
+  parent_participant_ids: string[];
   name: string;
   role: string;
   system_prompt: string;

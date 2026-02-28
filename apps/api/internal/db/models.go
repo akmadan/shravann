@@ -64,9 +64,10 @@ type Agent struct {
 	VoiceProvider *string        `gorm:"column:voice_provider;type:text"`
 	VoiceConfig   datatypes.JSON `gorm:"column:voice_config;type:jsonb;not null;default:'{}'"`
 	Language      string         `gorm:"type:text;not null;default:en"`
-	Metadata      datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"`
-	IsActive      bool           `gorm:"not null;default:true"`
-	CreatedBy     uuid.UUID      `gorm:"type:uuid;not null"`
+	Metadata                   datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"`
+	SessionStartInputSchema    datatypes.JSON `gorm:"column:session_start_input_schema;type:jsonb;not null;default:'[]'"`
+	IsActive                   bool           `gorm:"not null;default:true"`
+	CreatedBy                  uuid.UUID      `gorm:"type:uuid;not null"`
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 
@@ -95,6 +96,17 @@ type AgentParticipant struct {
 }
 
 func (AgentParticipant) TableName() string { return "agent_participants" }
+
+// AgentParticipantParent links a participant to a parent (many-to-many).
+type AgentParticipantParent struct {
+	ParticipantID uuid.UUID `gorm:"type:uuid;primaryKey"`
+	ParentID      uuid.UUID `gorm:"type:uuid;primaryKey"`
+
+	Participant AgentParticipant `gorm:"foreignKey:ParticipantID"`
+	Parent      AgentParticipant `gorm:"foreignKey:ParentID"`
+}
+
+func (AgentParticipantParent) TableName() string { return "agent_participant_parents" }
 
 type SessionChannel string
 

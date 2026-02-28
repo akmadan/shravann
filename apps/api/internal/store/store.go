@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/shravann/api/internal/db"
 	"gorm.io/gorm"
 )
@@ -238,6 +239,46 @@ func (s *Store) UpdateParticipant(ctx context.Context, p *db.AgentParticipant) e
 
 func (s *Store) DeleteParticipant(ctx context.Context, id string) error {
 	return s.db.WithContext(ctx).Where("id = ?", id).Delete(&db.AgentParticipant{}).Error
+}
+
+// SetParticipantParents replaces all parents for a participant (many-to-many).
+func (s *Store) SetParticipantParents(ctx context.Context, participantID string, parentIDs []string) error {
+	pid, err := uuid.Parse(participantID)
+	if err != nil {
+		return err
+	}
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("participant_id = ?", pid).Delete(&db.AgentParticipantParent{}).Error; err != nil {
+			return err
+		}
+		for _, parentID := range parentIDs {
+			parentUUID, err := uuid.Parse(parentID)
+			if err != nil {
+				return err
+			}
+			if parentUUID == pid {
+				continue
+			}
+			if err := tx.Create(&db.AgentParticipantParent{ParticipantID: pid, ParentID: parentUUID}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// ListParticipantParentIDs returns parent IDs for a participant.
+func (s *Store) ListParticipantParentIDs(ctx context.Context, participantID string) ([]string, error) {
+	var rows []db.AgentParticipantParent
+	err := s.db.WithContext(ctx).Where("participant_id = ?", participantID).Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, len(rows))
+	for i := range rows {
+		ids[i] = rows[i].ParentID.String()
+	}
+	return ids, nil
 }
 
 // GetAgentWithParticipants loads an agent and all its participants in one shot (used by worker).

@@ -405,9 +405,10 @@ func (h *Handler) CreateAgent(w http.ResponseWriter, r *http.Request) {
 		SystemPrompt  string          `json:"system_prompt"`
 		Model         string          `json:"model"`
 		VoiceProvider *string         `json:"voice_provider"`
-		VoiceConfig   json.RawMessage `json:"voice_config"`
-		Language      string          `json:"language"`
-		Metadata      json.RawMessage `json:"metadata"`
+		VoiceConfig                json.RawMessage `json:"voice_config"`
+		Language                   string          `json:"language"`
+		Metadata                   json.RawMessage `json:"metadata"`
+		SessionStartInputSchema    json.RawMessage `json:"session_start_input_schema"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		BadRequest(w, "invalid JSON")
@@ -435,6 +436,10 @@ func (h *Handler) CreateAgent(w http.ResponseWriter, r *http.Request) {
 	if len(body.Metadata) > 0 {
 		metadata = datatypes.JSON(append([]byte(nil), body.Metadata...))
 	}
+	sessionStartSchema := datatypes.JSON([]byte("[]"))
+	if len(body.SessionStartInputSchema) > 0 {
+		sessionStartSchema = datatypes.JSON(append([]byte(nil), body.SessionStartInputSchema...))
+	}
 	model := body.Model
 	if model == "" {
 		model = "gpt-4o"
@@ -444,16 +449,17 @@ func (h *Handler) CreateAgent(w http.ResponseWriter, r *http.Request) {
 		lang = "en"
 	}
 	a := &db.Agent{
-		ProjectID:     pid,
-		Name:          body.Name,
-		Slug:          body.Slug,
-		SystemPrompt:  body.SystemPrompt,
-		Model:         model,
-		VoiceProvider: body.VoiceProvider,
-		VoiceConfig:   voiceConfig,
-		Language:      lang,
-		Metadata:      metadata,
-		CreatedBy:     uid,
+		ProjectID:                pid,
+		Name:                     body.Name,
+		Slug:                     body.Slug,
+		SystemPrompt:             body.SystemPrompt,
+		Model:                    model,
+		VoiceProvider:            body.VoiceProvider,
+		VoiceConfig:              voiceConfig,
+		Language:                 lang,
+		Metadata:                 metadata,
+		SessionStartInputSchema:  sessionStartSchema,
+		CreatedBy:                uid,
 	}
 	if err := h.store.CreateAgent(r.Context(), a); err != nil {
 		Err(w, err)
@@ -501,8 +507,9 @@ func (h *Handler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
 		VoiceProvider *string         `json:"voice_provider"`
 		VoiceConfig   json.RawMessage `json:"voice_config"`
 		Language      *string         `json:"language"`
-		Metadata      json.RawMessage `json:"metadata"`
-		IsActive      *bool           `json:"is_active"`
+		Metadata                   json.RawMessage `json:"metadata"`
+		SessionStartInputSchema    json.RawMessage `json:"session_start_input_schema"`
+		IsActive                   *bool           `json:"is_active"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		BadRequest(w, "invalid JSON")
@@ -532,6 +539,9 @@ func (h *Handler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
 	if len(body.Metadata) > 0 {
 		a.Metadata = datatypes.JSON(append([]byte(nil), body.Metadata...))
 	}
+	if len(body.SessionStartInputSchema) > 0 {
+		a.SessionStartInputSchema = datatypes.JSON(append([]byte(nil), body.SessionStartInputSchema...))
+	}
 	if body.IsActive != nil {
 		a.IsActive = *body.IsActive
 	}
@@ -553,19 +563,20 @@ func (h *Handler) DeleteAgent(w http.ResponseWriter, r *http.Request) {
 
 func agentResp(a *db.Agent) map[string]any {
 	r := map[string]any{
-		"id":             a.ID.String(),
-		"project_id":     a.ProjectID.String(),
-		"name":           a.Name,
-		"slug":           a.Slug,
-		"system_prompt":  a.SystemPrompt,
-		"model":          a.Model,
-		"language":       a.Language,
-		"is_active":      a.IsActive,
-		"created_by":     a.CreatedBy.String(),
-		"created_at":     a.CreatedAt,
-		"updated_at":     a.UpdatedAt,
-		"voice_config":  a.VoiceConfig,
-		"metadata":       a.Metadata,
+		"id":                          a.ID.String(),
+		"project_id":                  a.ProjectID.String(),
+		"name":                        a.Name,
+		"slug":                        a.Slug,
+		"system_prompt":               a.SystemPrompt,
+		"model":                       a.Model,
+		"language":                    a.Language,
+		"is_active":                   a.IsActive,
+		"created_by":                  a.CreatedBy.String(),
+		"created_at":                  a.CreatedAt,
+		"updated_at":                  a.UpdatedAt,
+		"voice_config":                a.VoiceConfig,
+		"metadata":                    a.Metadata,
+		"session_start_input_schema":  a.SessionStartInputSchema,
 	}
 	if a.VoiceProvider != nil {
 		r["voice_provider"] = *a.VoiceProvider
@@ -662,15 +673,16 @@ func (h *Handler) EndSession(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
 	agentID := chi.URLParam(r, "id")
 	var body struct {
-		Name               string  `json:"name"`
-		Role               string  `json:"role"`
-		SystemPrompt       string  `json:"system_prompt"`
-		Model              string  `json:"model"`
-		VoiceProvider      *string `json:"voice_provider"`
-		VoiceID            *string `json:"voice_id"`
-		HandoffDescription string  `json:"handoff_description"`
-		IsEntryPoint       bool    `json:"is_entry_point"`
-		Position           int     `json:"position"`
+		Name                 string   `json:"name"`
+		Role                 string   `json:"role"`
+		SystemPrompt         string   `json:"system_prompt"`
+		Model                string   `json:"model"`
+		VoiceProvider        *string  `json:"voice_provider"`
+		VoiceID              *string  `json:"voice_id"`
+		HandoffDescription   string   `json:"handoff_description"`
+		IsEntryPoint         bool     `json:"is_entry_point"`
+		Position             int      `json:"position"`
+		ParentParticipantIDs []string `json:"parent_participant_ids"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		BadRequest(w, "invalid JSON")
@@ -705,7 +717,17 @@ func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
 		Err(w, err)
 		return
 	}
-	JSON(w, http.StatusCreated, participantResp(p))
+	if len(body.ParentParticipantIDs) > 0 {
+		if err := h.store.SetParticipantParents(r.Context(), p.ID.String(), body.ParentParticipantIDs); err != nil {
+			Err(w, err)
+			return
+		}
+	}
+	parentIDs := body.ParentParticipantIDs
+	if parentIDs == nil {
+		parentIDs = []string{}
+	}
+	JSON(w, http.StatusCreated, participantResp(p, parentIDs))
 }
 
 func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
@@ -717,7 +739,8 @@ func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]map[string]any, len(list))
 	for i := range list {
-		out[i] = participantResp(&list[i])
+		parentIDs, _ := h.store.ListParticipantParentIDs(r.Context(), list[i].ID.String())
+		out[i] = participantResp(&list[i], parentIDs)
 	}
 	JSON(w, http.StatusOK, map[string]any{"participants": out})
 }
@@ -729,7 +752,8 @@ func (h *Handler) GetParticipant(w http.ResponseWriter, r *http.Request) {
 		Err(w, err)
 		return
 	}
-	JSON(w, http.StatusOK, participantResp(p))
+	parentIDs, _ := h.store.ListParticipantParentIDs(r.Context(), pid)
+	JSON(w, http.StatusOK, participantResp(p, parentIDs))
 }
 
 func (h *Handler) UpdateParticipant(w http.ResponseWriter, r *http.Request) {
@@ -740,15 +764,16 @@ func (h *Handler) UpdateParticipant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name               *string `json:"name"`
-		Role               *string `json:"role"`
-		SystemPrompt       *string `json:"system_prompt"`
-		Model              *string `json:"model"`
-		VoiceProvider      *string `json:"voice_provider"`
-		VoiceID            *string `json:"voice_id"`
-		HandoffDescription *string `json:"handoff_description"`
-		IsEntryPoint       *bool   `json:"is_entry_point"`
-		Position           *int    `json:"position"`
+		Name                 *string  `json:"name"`
+		Role                 *string  `json:"role"`
+		SystemPrompt         *string  `json:"system_prompt"`
+		Model                *string  `json:"model"`
+		VoiceProvider        *string  `json:"voice_provider"`
+		VoiceID              *string  `json:"voice_id"`
+		HandoffDescription   *string  `json:"handoff_description"`
+		IsEntryPoint         *bool    `json:"is_entry_point"`
+		Position             *int     `json:"position"`
+		ParentParticipantIDs []string `json:"parent_participant_ids"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		BadRequest(w, "invalid JSON")
@@ -781,11 +806,18 @@ func (h *Handler) UpdateParticipant(w http.ResponseWriter, r *http.Request) {
 	if body.Position != nil {
 		p.Position = *body.Position
 	}
+	if body.ParentParticipantIDs != nil {
+		if err := h.store.SetParticipantParents(r.Context(), pid, body.ParentParticipantIDs); err != nil {
+			Err(w, err)
+			return
+		}
+	}
 	if err := h.store.UpdateParticipant(r.Context(), p); err != nil {
 		Err(w, err)
 		return
 	}
-	JSON(w, http.StatusOK, participantResp(p))
+	parentIDs, _ := h.store.ListParticipantParentIDs(r.Context(), pid)
+	JSON(w, http.StatusOK, participantResp(p, parentIDs))
 }
 
 func (h *Handler) DeleteParticipant(w http.ResponseWriter, r *http.Request) {
@@ -797,20 +829,21 @@ func (h *Handler) DeleteParticipant(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func participantResp(p *db.AgentParticipant) map[string]any {
+func participantResp(p *db.AgentParticipant, parentIDs []string) map[string]any {
 	r := map[string]any{
-		"id":                  p.ID.String(),
-		"agent_id":            p.AgentID.String(),
-		"name":                p.Name,
-		"role":                p.Role,
-		"system_prompt":       p.SystemPrompt,
-		"model":               p.Model,
-		"voice_config":        p.VoiceConfig,
-		"handoff_description": p.HandoffDescription,
-		"is_entry_point":      p.IsEntryPoint,
-		"position":            p.Position,
-		"created_at":          p.CreatedAt,
-		"updated_at":          p.UpdatedAt,
+		"id":                    p.ID.String(),
+		"agent_id":              p.AgentID.String(),
+		"parent_participant_ids": parentIDs,
+		"name":                  p.Name,
+		"role":                  p.Role,
+		"system_prompt":         p.SystemPrompt,
+		"model":                 p.Model,
+		"voice_config":          p.VoiceConfig,
+		"handoff_description":   p.HandoffDescription,
+		"is_entry_point":        p.IsEntryPoint,
+		"position":              p.Position,
+		"created_at":            p.CreatedAt,
+		"updated_at":            p.UpdatedAt,
 	}
 	if p.VoiceProvider != nil {
 		r["voice_provider"] = *p.VoiceProvider
@@ -857,8 +890,9 @@ func (h *Handler) StartSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Identity string `json:"identity"`
-		Channel  string `json:"channel"`
+		Identity         string            `json:"identity"`
+		Channel          string            `json:"channel"`
+		SessionStartData map[string]string `json:"session_start_data"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		BadRequest(w, "invalid JSON")
@@ -878,11 +912,17 @@ func (h *Handler) StartSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	meta := datatypes.JSON([]byte("{}"))
+	if len(body.SessionStartData) > 0 {
+		metaBytes, _ := json.Marshal(body.SessionStartData)
+		meta = datatypes.JSON(metaBytes)
+	}
 	sess := &db.Session{
 		AgentID:        agent.ID,
 		ExternalUserID: &body.Identity,
 		Channel:        channel,
 		Status:         db.StatusActive,
+		Metadata:       meta,
 	}
 	if err := h.store.CreateSession(r.Context(), sess); err != nil {
 		Err(w, err)
