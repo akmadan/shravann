@@ -66,6 +66,7 @@ type Agent struct {
 	Language      string         `gorm:"type:text;not null;default:en"`
 	Metadata                   datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"`
 	SessionStartInputSchema    datatypes.JSON `gorm:"column:session_start_input_schema;type:jsonb;not null;default:'[]'"`
+	FormID                     *uuid.UUID     `gorm:"column:form_id;type:uuid"`
 	IsActive                   bool           `gorm:"not null;default:true"`
 	CreatedBy                  uuid.UUID      `gorm:"type:uuid;not null"`
 	CreatedAt     time.Time
@@ -75,6 +76,40 @@ type Agent struct {
 }
 
 func (Agent) TableName() string { return "agents" }
+
+type Form struct {
+	ID          uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	ProjectID   uuid.UUID `gorm:"type:uuid;not null;index"`
+	Name        string    `gorm:"type:text;not null"`
+	Slug        string    `gorm:"type:text;not null;uniqueIndex:idx_forms_project_slug"`
+	Description string    `gorm:"type:text;not null;default:''"`
+	CreatedBy   uuid.UUID `gorm:"type:uuid;not null"`
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+
+	Project Project     `gorm:"foreignKey:ProjectID"`
+	Fields  []FormField `gorm:"foreignKey:FormID"`
+}
+
+func (Form) TableName() string { return "forms" }
+
+type FormField struct {
+	ID         uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	FormID     uuid.UUID      `gorm:"type:uuid;not null;index;uniqueIndex:idx_form_fields_form_key"`
+	Key        string         `gorm:"type:text;not null;uniqueIndex:idx_form_fields_form_key"`
+	Label      string         `gorm:"type:text;not null"`
+	Type       string         `gorm:"type:text;not null;default:text"`
+	Config     datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"`
+	Validators datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'"`
+	Required   bool           `gorm:"not null;default:false"`
+	Position   int            `gorm:"not null;default:0"`
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+
+	Form Form `gorm:"foreignKey:FormID"`
+}
+
+func (FormField) TableName() string { return "form_fields" }
 
 type AgentParticipant struct {
 	ID                 uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`

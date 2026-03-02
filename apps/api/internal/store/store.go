@@ -341,3 +341,76 @@ func (s *Store) CountSessionsByAgent(ctx context.Context, agentID string) (int64
 	err := s.db.WithContext(ctx).Model(&db.Session{}).Where("agent_id = ?", agentID).Count(&n).Error
 	return n, err
 }
+
+// --- Forms ---
+
+func (s *Store) CreateForm(ctx context.Context, f *db.Form) error {
+	return s.db.WithContext(ctx).Create(f).Error
+}
+
+func (s *Store) GetFormByID(ctx context.Context, id string) (*db.Form, error) {
+	var f db.Form
+	err := s.db.WithContext(ctx).Where("id = ?", id).First(&f).Error
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
+func (s *Store) GetFormWithFields(ctx context.Context, id string) (*db.Form, error) {
+	var f db.Form
+	err := s.db.WithContext(ctx).Where("id = ?", id).Preload("Fields", func(tx *gorm.DB) *gorm.DB {
+		return tx.Order("position ASC, created_at ASC")
+	}).First(&f).Error
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
+func (s *Store) ListFormsByProject(ctx context.Context, projectID string) ([]db.Form, error) {
+	var list []db.Form
+	err := s.db.WithContext(ctx).Where("project_id = ?", projectID).Order("created_at DESC").Find(&list).Error
+	return list, err
+}
+
+func (s *Store) UpdateForm(ctx context.Context, f *db.Form) error {
+	return s.db.WithContext(ctx).Save(f).Error
+}
+
+func (s *Store) DeleteForm(ctx context.Context, id string) error {
+	return s.db.WithContext(ctx).Where("id = ?", id).Delete(&db.Form{}).Error
+}
+
+// --- Form Fields ---
+
+func (s *Store) CreateFormField(ctx context.Context, f *db.FormField) error {
+	return s.db.WithContext(ctx).Create(f).Error
+}
+
+func (s *Store) GetFormFieldByID(ctx context.Context, id string) (*db.FormField, error) {
+	var f db.FormField
+	err := s.db.WithContext(ctx).Where("id = ?", id).First(&f).Error
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
+func (s *Store) ListFormFields(ctx context.Context, formID string) ([]db.FormField, error) {
+	var list []db.FormField
+	err := s.db.WithContext(ctx).Where("form_id = ?", formID).Order("position ASC, created_at ASC").Find(&list).Error
+	return list, err
+}
+
+func (s *Store) UpdateFormField(ctx context.Context, f *db.FormField) error {
+	return s.db.WithContext(ctx).Save(f).Error
+}
+
+func (s *Store) DeleteFormField(ctx context.Context, id string) error {
+	return s.db.WithContext(ctx).Where("id = ?", id).Delete(&db.FormField{}).Error
+}
+
+func (s *Store) DeleteFormFieldsByForm(ctx context.Context, formID string) error {
+	return s.db.WithContext(ctx).Where("form_id = ?", formID).Delete(&db.FormField{}).Error
+}

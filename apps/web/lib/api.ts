@@ -154,6 +154,7 @@ export function createAgent(
     voice_provider?: string;
     language?: string;
     session_start_input_schema?: SessionStartField[];
+    form_id?: string;
   },
   userId: string
 ) {
@@ -175,6 +176,7 @@ export function updateAgent(
     language: string;
     is_active: boolean;
     session_start_input_schema: SessionStartField[];
+    form_id: string;
   }>
 ) {
   return request<Agent>(`/agents/${id}`, {
@@ -245,6 +247,54 @@ export function deleteParticipant(agentId: string, participantId: string) {
   return request<null>(`/agents/${agentId}/participants/${participantId}`, {
     method: "DELETE",
   });
+}
+
+// --- Forms ---
+
+export function listForms(projectId: string, userId: string) {
+  return request<{ forms: Form[] }>(`/projects/${projectId}/forms`, {
+    userId,
+  });
+}
+
+export function getForm(id: string) {
+  return request<Form>(`/forms/${id}`);
+}
+
+export function createForm(
+  projectId: string,
+  data: {
+    name: string;
+    slug: string;
+    description?: string;
+    fields?: FormFieldDraft[];
+  },
+  userId: string
+) {
+  return request<Form>(`/projects/${projectId}/forms`, {
+    method: "POST",
+    body: JSON.stringify(data),
+    userId,
+  });
+}
+
+export function updateForm(
+  id: string,
+  data: {
+    name?: string;
+    slug?: string;
+    description?: string;
+    fields?: FormFieldDraft[];
+  }
+) {
+  return request<Form>(`/forms/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteForm(id: string) {
+  return request<null>(`/forms/${id}`, { method: "DELETE" });
 }
 
 // --- Sessions ---
@@ -319,6 +369,7 @@ export interface Agent {
   language: string;
   metadata?: Record<string, unknown>;
   session_start_input_schema?: SessionStartField[];
+  form_id?: string;
   is_active: boolean;
   created_by: string;
   created_at: string;
@@ -353,4 +404,62 @@ export interface Session {
   started_at: string;
   ended_at?: string;
   created_at: string;
+}
+
+export type FormFieldType =
+  | "text"
+  | "email"
+  | "phone"
+  | "boolean"
+  | "select"
+  | "multi_select";
+
+export interface FormFieldValidator {
+  type: "min_length" | "max_length" | "pattern";
+  value: string | number;
+}
+
+export interface FormFieldOption {
+  value: string;
+  label: string;
+}
+
+export interface FormFieldConfig {
+  options?: FormFieldOption[];
+}
+
+export interface FormField {
+  id: string;
+  form_id: string;
+  key: string;
+  label: string;
+  type: FormFieldType;
+  config: FormFieldConfig;
+  validators: FormFieldValidator[];
+  required: boolean;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FormFieldDraft {
+  key: string;
+  label: string;
+  type: FormFieldType;
+  config?: FormFieldConfig;
+  validators?: FormFieldValidator[];
+  required: boolean;
+  position: number;
+}
+
+export interface Form {
+  id: string;
+  project_id: string;
+  name: string;
+  slug: string;
+  description: string;
+  fields?: FormField[];
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 }

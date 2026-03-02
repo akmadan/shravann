@@ -1,30 +1,14 @@
 """Build Agent instances dynamically from database config."""
 
 import logging
-from typing import Any
 
 from livekit.agents.llm import function_tool
 from livekit.agents.voice import Agent, RunContext
-from livekit.plugins import openai
 
 from .base import BaseAgent, SessionData
-from .db import AgentRow, ParticipantRow
+from .db import AgentRow
 
 logger = logging.getLogger("shravann.factory")
-
-
-def get_llm(model: str) -> Any:
-    """Return an LLM instance based on model name."""
-    if model.startswith("claude"):
-        # Future: add Anthropic support
-        logger.warning("Anthropic not yet supported, falling back to openai")
-        return openai.LLM(model="gpt-4o")
-    return openai.LLM(model=model, parallel_tool_calls=False)
-
-
-def get_tts(provider: str | None, voice_id: str | None) -> Any:
-    """Return a TTS instance. With Realtime session the pipeline uses OpenAI Realtime (speech-to-speech); this is only used if session does not use Realtime."""
-    return openai.TTS()
 
 
 def _make_handoff_tool(target_role: str, description: str):
@@ -44,7 +28,11 @@ def _make_handoff_tool(target_role: str, description: str):
 
 
 def build_agents(agent_config: AgentRow) -> dict[str, Agent]:
-    """Turn database rows into live Agent instances with handoff tools."""
+    """Turn database rows into live Agent instances with handoff tools.
+
+    LLM and TTS are intentionally omitted — the session-level
+    RealtimeModel (speech-to-speech) handles both, and agents inherit it.
+    """
     participants = agent_config.participants
     agents: dict[str, Agent] = {}
 
@@ -61,8 +49,6 @@ def build_agents(agent_config: AgentRow) -> dict[str, Agent]:
 
         agent = BaseAgent(
             instructions=instructions,
-            llm=get_llm(p.model),
-            tts=get_tts(p.voice_provider, p.voice_id),
             tools=handoff_tools,
         )
         agent._participant_role = p.role
@@ -70,10 +56,9 @@ def build_agents(agent_config: AgentRow) -> dict[str, Agent]:
         agents[p.role] = agent
 
         logger.info(
-            "built participant: %s (role=%s, model=%s, entry=%s)",
+            "built participant: %s (role=%s, entry=%s)",
             p.name,
             p.role,
-            p.model,
             p.is_entry_point,
         )
 

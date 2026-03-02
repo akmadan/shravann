@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   FolderKanban,
   Bot,
+  FileText,
   MessageSquare,
 } from "lucide-react";
 
@@ -14,6 +15,7 @@ const nav = [
   { label: "Overview", href: "/", icon: LayoutDashboard },
   { label: "Projects", href: "/projects", icon: FolderKanban },
   { label: "Agents", href: "/agents", icon: Bot },
+  { label: "Forms", href: "/forms", icon: FileText },
   { label: "Sessions", href: "/sessions", icon: MessageSquare },
 ];
 

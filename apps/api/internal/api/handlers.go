@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -409,6 +410,7 @@ func (h *Handler) CreateAgent(w http.ResponseWriter, r *http.Request) {
 		Language                   string          `json:"language"`
 		Metadata                   json.RawMessage `json:"metadata"`
 		SessionStartInputSchema    json.RawMessage `json:"session_start_input_schema"`
+		FormID                     *string         `json:"form_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		BadRequest(w, "invalid JSON")
@@ -448,6 +450,15 @@ func (h *Handler) CreateAgent(w http.ResponseWriter, r *http.Request) {
 	if lang == "" {
 		lang = "en"
 	}
+	var formID *uuid.UUID
+	if body.FormID != nil && *body.FormID != "" {
+		fid, err := uuid.Parse(*body.FormID)
+		if err != nil {
+			BadRequest(w, "invalid form_id")
+			return
+		}
+		formID = &fid
+	}
 	a := &db.Agent{
 		ProjectID:                pid,
 		Name:                     body.Name,
@@ -459,6 +470,7 @@ func (h *Handler) CreateAgent(w http.ResponseWriter, r *http.Request) {
 		Language:                 lang,
 		Metadata:                 metadata,
 		SessionStartInputSchema:  sessionStartSchema,
+		FormID:                   formID,
 		CreatedBy:                uid,
 	}
 	if err := h.store.CreateAgent(r.Context(), a); err != nil {
@@ -509,6 +521,7 @@ func (h *Handler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
 		Language      *string         `json:"language"`
 		Metadata                   json.RawMessage `json:"metadata"`
 		SessionStartInputSchema    json.RawMessage `json:"session_start_input_schema"`
+		FormID                     *string         `json:"form_id"`
 		IsActive                   *bool           `json:"is_active"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -541,6 +554,18 @@ func (h *Handler) UpdateAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(body.SessionStartInputSchema) > 0 {
 		a.SessionStartInputSchema = datatypes.JSON(append([]byte(nil), body.SessionStartInputSchema...))
+	}
+	if body.FormID != nil {
+		if *body.FormID == "" {
+			a.FormID = nil
+		} else {
+			fid, err := uuid.Parse(*body.FormID)
+			if err != nil {
+				BadRequest(w, "invalid form_id")
+				return
+			}
+			a.FormID = &fid
+		}
 	}
 	if body.IsActive != nil {
 		a.IsActive = *body.IsActive
@@ -580,6 +605,9 @@ func agentResp(a *db.Agent) map[string]any {
 	}
 	if a.VoiceProvider != nil {
 		r["voice_provider"] = *a.VoiceProvider
+	}
+	if a.FormID != nil {
+		r["form_id"] = a.FormID.String()
 	}
 	return r
 }
@@ -906,6 +934,7 @@ func (h *Handler) StartSession(w http.ResponseWriter, r *http.Request) {
 		channel = db.ChannelChat
 	}
 
+	log.Printf("[session] StartSession: agent_id=%s identity=%s channel=%s", agentID, body.Identity, channel)
 	roomName, token, err := h.livekit.CreateSessionRoom(r.Context(), agentID, body.Identity)
 	if err != nil {
 		Err(w, err)
@@ -929,6 +958,7 @@ func (h *Handler) StartSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("[session] StartSession created: session_id=%s room_name=%s identity=%s", sess.ID.String(), roomName, body.Identity)
 	JSON(w, http.StatusCreated, map[string]any{
 		"session":    sessionResp(sess),
 		"room_name":  roomName,
@@ -942,6 +972,242 @@ type errMsg struct {
 }
 
 func (e *errMsg) Error() string { return e.msg }
+
+// --- Forms ---
+
+func (h *Handler) CreateForm(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	userID := UserIDFrom(r.Context())
+	if userID == "" {
+		BadRequest(w, "X-User-ID required")
+		return
+	}
+	var body struct {
+		Name        string          `json:"name"`
+		Slug        string          `json:"slug"`
+		Description string          `json:"description"`
+		Fields      json.RawMessage `json:"fields"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		BadRequest(w, "invalid JSON")
+		return
+	}
+	if body.Name == "" || body.Slug == "" {
+		BadRequest(w, "name and slug required")
+		return
+	}
+	pid, err := uuid.Parse(projectID)
+	if err != nil {
+		BadRequest(w, "invalid project id")
+		return
+	}
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		BadRequest(w, "invalid user id")
+		return
+	}
+	f := &db.Form{
+		ProjectID:   pid,
+		Name:        body.Name,
+		Slug:        body.Slug,
+		Description: body.Description,
+		CreatedBy:   uid,
+	}
+	if err := h.store.CreateForm(r.Context(), f); err != nil {
+		Err(w, err)
+		return
+	}
+	if len(body.Fields) > 0 {
+		var fields []struct {
+			Key        string          `json:"key"`
+			Label      string          `json:"label"`
+			Type       string          `json:"type"`
+			Config     json.RawMessage `json:"config"`
+			Validators json.RawMessage `json:"validators"`
+			Required   bool            `json:"required"`
+			Position   int             `json:"position"`
+		}
+		if err := json.Unmarshal(body.Fields, &fields); err == nil {
+			for _, fd := range fields {
+				fieldType := fd.Type
+				if fieldType == "" {
+					fieldType = "text"
+				}
+				config := datatypes.JSON([]byte("{}"))
+				if len(fd.Config) > 0 {
+					config = datatypes.JSON(append([]byte(nil), fd.Config...))
+				}
+				validators := datatypes.JSON([]byte("[]"))
+				if len(fd.Validators) > 0 {
+					validators = datatypes.JSON(append([]byte(nil), fd.Validators...))
+				}
+				ff := &db.FormField{
+					FormID:     f.ID,
+					Key:        fd.Key,
+					Label:      fd.Label,
+					Type:       fieldType,
+					Config:     config,
+					Validators: validators,
+					Required:   fd.Required,
+					Position:   fd.Position,
+				}
+				_ = h.store.CreateFormField(r.Context(), ff)
+			}
+		}
+	}
+	form, _ := h.store.GetFormWithFields(r.Context(), f.ID.String())
+	if form == nil {
+		form = f
+	}
+	JSON(w, http.StatusCreated, formResp(form))
+}
+
+func (h *Handler) ListForms(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	list, err := h.store.ListFormsByProject(r.Context(), projectID)
+	if err != nil {
+		Err(w, err)
+		return
+	}
+	out := make([]map[string]any, len(list))
+	for i := range list {
+		out[i] = formResp(&list[i])
+	}
+	JSON(w, http.StatusOK, map[string]any{"forms": out})
+}
+
+func (h *Handler) GetForm(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	f, err := h.store.GetFormWithFields(r.Context(), id)
+	if err != nil {
+		Err(w, err)
+		return
+	}
+	JSON(w, http.StatusOK, formResp(f))
+}
+
+func (h *Handler) UpdateForm(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	f, err := h.store.GetFormByID(r.Context(), id)
+	if err != nil {
+		Err(w, err)
+		return
+	}
+	var body struct {
+		Name        *string         `json:"name"`
+		Slug        *string         `json:"slug"`
+		Description *string         `json:"description"`
+		Fields      json.RawMessage `json:"fields"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		BadRequest(w, "invalid JSON")
+		return
+	}
+	if body.Name != nil {
+		f.Name = *body.Name
+	}
+	if body.Slug != nil {
+		f.Slug = *body.Slug
+	}
+	if body.Description != nil {
+		f.Description = *body.Description
+	}
+	if err := h.store.UpdateForm(r.Context(), f); err != nil {
+		Err(w, err)
+		return
+	}
+	if len(body.Fields) > 0 {
+		var fields []struct {
+			ID         *string         `json:"id"`
+			Key        string          `json:"key"`
+			Label      string          `json:"label"`
+			Type       string          `json:"type"`
+			Config     json.RawMessage `json:"config"`
+			Validators json.RawMessage `json:"validators"`
+			Required   bool            `json:"required"`
+			Position   int             `json:"position"`
+		}
+		if err := json.Unmarshal(body.Fields, &fields); err == nil {
+			_ = h.store.DeleteFormFieldsByForm(r.Context(), f.ID.String())
+			for _, fd := range fields {
+				fieldType := fd.Type
+				if fieldType == "" {
+					fieldType = "text"
+				}
+				config := datatypes.JSON([]byte("{}"))
+				if len(fd.Config) > 0 {
+					config = datatypes.JSON(append([]byte(nil), fd.Config...))
+				}
+				validators := datatypes.JSON([]byte("[]"))
+				if len(fd.Validators) > 0 {
+					validators = datatypes.JSON(append([]byte(nil), fd.Validators...))
+				}
+				ff := &db.FormField{
+					FormID:     f.ID,
+					Key:        fd.Key,
+					Label:      fd.Label,
+					Type:       fieldType,
+					Config:     config,
+					Validators: validators,
+					Required:   fd.Required,
+					Position:   fd.Position,
+				}
+				_ = h.store.CreateFormField(r.Context(), ff)
+			}
+		}
+	}
+	form, _ := h.store.GetFormWithFields(r.Context(), f.ID.String())
+	if form == nil {
+		form = f
+	}
+	JSON(w, http.StatusOK, formResp(form))
+}
+
+func (h *Handler) DeleteForm(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if err := h.store.DeleteForm(r.Context(), id); err != nil {
+		Err(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func formResp(f *db.Form) map[string]any {
+	r := map[string]any{
+		"id":          f.ID.String(),
+		"project_id":  f.ProjectID.String(),
+		"name":        f.Name,
+		"slug":        f.Slug,
+		"description": f.Description,
+		"created_by":  f.CreatedBy.String(),
+		"created_at":  f.CreatedAt,
+		"updated_at":  f.UpdatedAt,
+	}
+	if f.Fields != nil {
+		fields := make([]map[string]any, len(f.Fields))
+		for i := range f.Fields {
+			fields[i] = formFieldResp(&f.Fields[i])
+		}
+		r["fields"] = fields
+	}
+	return r
+}
+
+func formFieldResp(f *db.FormField) map[string]any {
+	return map[string]any{
+		"id":         f.ID.String(),
+		"form_id":    f.FormID.String(),
+		"key":        f.Key,
+		"label":      f.Label,
+		"type":       f.Type,
+		"config":     f.Config,
+		"validators": f.Validators,
+		"required":   f.Required,
+		"position":   f.Position,
+		"created_at": f.CreatedAt,
+		"updated_at": f.UpdatedAt,
+	}
+}
 
 func sessionResp(s *db.Session) map[string]any {
 	r := map[string]any{

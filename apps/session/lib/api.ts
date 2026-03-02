@@ -30,6 +30,48 @@ export interface AgentPublic {
   slug: string;
   is_active: boolean;
   session_start_input_schema: SessionStartField[];
+  form_id?: string;
+}
+
+export type FormFieldType =
+  | "text"
+  | "email"
+  | "phone"
+  | "boolean"
+  | "select"
+  | "multi_select";
+
+export interface FormFieldValidator {
+  type: "min_length" | "max_length" | "pattern";
+  value: string | number;
+}
+
+export interface FormFieldOption {
+  value: string;
+  label: string;
+}
+
+export interface FormFieldPublic {
+  id: string;
+  key: string;
+  label: string;
+  type: FormFieldType;
+  config: { options?: FormFieldOption[] };
+  validators: FormFieldValidator[];
+  required: boolean;
+  position: number;
+}
+
+export interface FormPublic {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  fields?: FormFieldPublic[];
+}
+
+export function getFormById(formId: string): Promise<FormPublic> {
+  return request<FormPublic>(`/forms/${formId}`);
 }
 
 export interface SessionStartResponse {

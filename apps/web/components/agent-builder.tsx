@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ReactFlow,
@@ -12,7 +12,6 @@ import {
   Background,
   BackgroundVariant,
   Controls,
-  MiniMap,
   Handle,
   Position,
   type Node,
@@ -31,6 +30,7 @@ import {
   Save,
   Sparkles,
   ArrowLeftRight,
+  Link2,
 } from "lucide-react";
 import {
   createAgent,
@@ -39,9 +39,11 @@ import {
   updateParticipant as updateParticipantApi,
   deleteAgent,
   deleteParticipant,
+  listForms,
   type Project,
   type Agent,
   type Participant,
+  type Form,
 } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────
@@ -400,11 +402,21 @@ function AgentBuilderInner({
     () => initialAgent?.system_prompt ?? ""
   );
   const [language, setLanguage] = useState("en");
-  const [sessionStartSchemaJson, setSessionStartSchemaJson] = useState(() =>
-    initialAgent?.session_start_input_schema?.length
-      ? JSON.stringify(initialAgent.session_start_input_schema, null, 2)
-      : ""
+  const [selectedFormId, setSelectedFormId] = useState<string>(
+    () => initialAgent?.form_id ?? ""
   );
+  const [availableForms, setAvailableForms] = useState<Form[]>([]);
+
+  useEffect(() => {
+    if (projectId) {
+      listForms(projectId, userId)
+        .then((res) => setAvailableForms(res.forms ?? []))
+        .catch(() => setAvailableForms([]));
+    } else {
+      setAvailableForms([]);
+    }
+  }, [projectId, userId]);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -554,29 +566,14 @@ function AgentBuilderInner({
     setSaving(true);
     setError("");
     try {
-      let sessionStartSchema: import("@/lib/api").SessionStartField[] | undefined;
-      if (sessionStartSchemaJson.trim()) {
-        try {
-          sessionStartSchema = JSON.parse(sessionStartSchemaJson) as import("@/lib/api").SessionStartField[];
-          if (!Array.isArray(sessionStartSchema)) {
-            setError("Session start schema must be a JSON array");
-            setSaving(false);
-            return;
-          }
-        } catch {
-          setError("Invalid JSON in session start form schema");
-          setSaving(false);
-          return;
-        }
-      }
-      const agentIdToUse = isEditMode ? agentId! : null;
+      const formId = selectedFormId || undefined;
       const agent = isEditMode
         ? await updateAgent(agentId!, {
             name: agentName,
             slug: agentSlug,
             system_prompt: sharedContext,
             language,
-            session_start_input_schema: sessionStartSchema,
+            form_id: selectedFormId || "",
           })
         : await createAgent(
             projectId,
@@ -585,7 +582,7 @@ function AgentBuilderInner({
               slug: agentSlug,
               system_prompt: sharedContext,
               language,
-              session_start_input_schema: sessionStartSchema,
+              form_id: formId,
             },
             userId
           );
@@ -678,6 +675,7 @@ function AgentBuilderInner({
     agentSlug,
     sharedContext,
     language,
+    selectedFormId,
     userId,
     nodes,
     edges,
@@ -749,6 +747,24 @@ function AgentBuilderInner({
             {isEditMode && (
               <>
                 <button
+                  onClick={() => {
+                    if (!agentId) return;
+                    const base =
+                      typeof process !== "undefined" && process.env.NEXT_PUBLIC_SESSION_APP_URL
+                        ? process.env.NEXT_PUBLIC_SESSION_APP_URL
+                        : "";
+                    const url = base ? `${base.replace(/\/$/, "")}/${agentId}` : agentId;
+                    navigator.clipboard.writeText(url).then(() => {
+                      // Could add a brief "Copied!" toast
+                    });
+                  }}
+                  className="flex items-center gap-1.5 rounded-md bg-white/[0.06] px-3 py-1.5 text-[13px] font-medium text-[#a1a1aa] hover:bg-white/[0.1] hover:text-white"
+                  title="Copy session link"
+                >
+                  <Link2 size={12} />
+                  Copy session link
+                </button>
+                <button
                   onClick={async () => {
                     if (!agentId) return;
                     await updateAgent(agentId, { is_active: !isActive });
@@ -781,9 +797,9 @@ function AgentBuilderInner({
           </div>
         </div>
 
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 overflow-hidden">
           {/* React Flow canvas */}
-          <div className="flex-1">
+          <div className="min-w-0 flex-1 overflow-hidden">
             <ReactFlow
               nodes={nodes}
               edges={edges}
@@ -813,12 +829,6 @@ function AgentBuilderInner({
               <Controls
                 className="!border-[#27272a] !bg-[#18181b] !text-[#a1a1aa] [&>button]:!border-[#27272a] [&>button]:hover:!bg-[#27272a]"
                 position="bottom-left"
-              />
-              <MiniMap
-                className="!bg-[#18181b] !border-[#27272a]"
-                nodeColor="#27272a"
-                nodeStrokeColor="#3b82f6"
-                maskColor="rgb(9, 9, 11, 0.8)"
               />
               <Panel position="top-left" className="m-3">
                 <div className="rounded-lg border border-[#27272a] bg-[#18181b]/95 p-4 shadow-lg backdrop-blur">
@@ -869,17 +879,22 @@ function AgentBuilderInner({
                     </div>
                     <div>
                       <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-[#71717a]">
-                        Session Start Form (JSON)
+                        Session Start Form
                       </label>
-                      <textarea
-                        value={sessionStartSchemaJson}
-                        onChange={(e) => setSessionStartSchemaJson(e.target.value)}
-                        placeholder='[{"key":"name","label":"Your name","type":"string","required":true}]'
-                        rows={3}
-                        className={`${INPUT} resize-none font-mono text-xs`}
-                      />
+                      <select
+                        value={selectedFormId}
+                        onChange={(e) => setSelectedFormId(e.target.value)}
+                        className={INPUT}
+                      >
+                        <option value="">None</option>
+                        {availableForms.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.name}
+                          </option>
+                        ))}
+                      </select>
                       <p className="mt-0.5 text-[10px] text-[#71717a]">
-                        Array of {"{ key, label, type?, required? }"} for pre-call form
+                        Select a form template shown before session starts
                       </p>
                     </div>
                   </div>
@@ -918,7 +933,7 @@ function DetailPanel({
 }) {
   if (!selected || !selectedId) {
     return (
-      <div className="flex w-80 shrink-0 flex-col items-center justify-center border-l border-[#27272a] bg-[#09090b] p-6">
+      <div className="relative z-10 flex w-80 shrink-0 flex-col items-center justify-center border-l border-[#27272a] bg-[#09090b] p-6">
         <Sparkles size={24} className="mb-3 text-[#27272a]" />
         <p className="text-center text-[13px] text-[#52525b]">
           Select a node to view and edit its details
@@ -928,7 +943,7 @@ function DetailPanel({
   }
 
   return (
-    <div className="flex w-80 shrink-0 flex-col border-l border-[#27272a] bg-[#09090b]">
+    <div className="relative z-10 flex w-80 shrink-0 flex-col border-l border-[#27272a] bg-[#09090b]">
       <div className="flex items-center justify-between border-b border-[#27272a] px-4 py-3">
         <div className="flex items-center gap-2">
           <div

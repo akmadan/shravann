@@ -63,13 +63,17 @@ function AgentDetailLoader() {
   }
 
   return (
-    <AgentBuilder
-      projects={projects}
-      preselectedProject={agent.project_id}
-      userId={backendUser.id}
-      agentId={agent.id}
-      initialAgent={agent}
-      initialParticipants={participants}
-    />
+    <div className="flex h-full flex-col">
+      <div className="min-h-0 flex-1">
+        <AgentBuilder
+          projects={projects}
+          preselectedProject={agent.project_id}
+          userId={backendUser.id}
+          agentId={agent.id}
+          initialAgent={agent}
+          initialParticipants={participants}
+        />
+      </div>
+    </div>
   );
 }

@@ -1,6 +1,3 @@
-"""Shravann Agent Worker — LiveKit agent server that dynamically loads
-agent configurations from Postgres at session start."""
-
 import json
 import logging
 
@@ -10,77 +7,86 @@ from livekit.agents import AgentServer, JobContext, cli
 from livekit.agents.voice import AgentSession
 from livekit.plugins import openai
 
-from agent.base import SessionData
-from agent.db import load_agent
-from agent.factory import build_agents, get_entry_point
+from agent import SessionData, build_agents, get_entry_point, load_agent
+
+logger = logging.getLogger("shravann.worker")
+logger.setLevel(logging.INFO)
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("shravann.worker")
+DEFAULT_VOICE = "alloy"
+
+
+def extract_agent_id(ctx: JobContext) -> str:
+    """Extract agent_id from LiveKit room metadata, falling back to room name parsing."""
+    meta_str = ctx.room.metadata
+    if meta_str:
+        try:
+            meta = json.loads(meta_str)
+            if "agent_id" in meta:
+                return meta["agent_id"]
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Fallback: room name format is session-{agentID}__{timestamp}__{identity}
+    name = ctx.room.name
+    if name and name.startswith("session-"):
+        parts = name[len("session-"):].split("__")
+        if parts:
+            return parts[0]
+
+    raise ValueError(f"Could not extract agent_id from room metadata or name: {ctx.room.name}")
+
+
+def resolve_voice(agent_config, entry_participant) -> str:
+    """Pick the voice for the Realtime session from the entry-point participant."""
+    if entry_participant and entry_participant.voice_id:
+        return entry_participant.voice_id
+    return DEFAULT_VOICE
+
 
 server = AgentServer()
 
 
-def _agent_id_from_room(room_name: str) -> str | None:
-    """Parse agent_id from room name. API uses session-{agentID}-{timestamp}."""
-    prefix = "session-"
-    if not room_name.startswith(prefix):
-        return None
-    rest = room_name[len(prefix) :]
-    parts = rest.rsplit("-", 1)
-    if len(parts) != 2 or not parts[1].isdigit():
-        return None
-    return parts[0] or None
-
-
 @server.rtc_session()
 async def entrypoint(ctx: JobContext):
-    room_meta = ctx.room.metadata or "{}"
-    try:
-        meta = json.loads(room_meta)
-    except json.JSONDecodeError:
-        meta = {}
-
-    agent_id = meta.get("agent_id")
-    if not agent_id and ctx.room.name:
-        agent_id = _agent_id_from_room(ctx.room.name)
-    if not agent_id:
-        logger.error("No agent_id in room metadata or room name: metadata=%s room=%s", room_meta, ctx.room.name)
-        return
-
-    logger.info("session start — agent_id=%s room=%s", agent_id, ctx.room.name)
+    agent_id = extract_agent_id(ctx)
+    logger.info("Session started — loading agent %s from database", agent_id)
 
     agent_config = load_agent(agent_id)
-    if not agent_config.is_active:
-        logger.warning("Agent %s is not active, skipping", agent_id)
-        return
     if not agent_config.participants:
-        logger.warning("Agent %s has no participants, skipping", agent_id)
-        return
+        raise ValueError(f"Agent {agent_id} has no participants configured")
 
     agents = build_agents(agent_config)
-    entry = get_entry_point(agent_config, agents)
+    entry_agent = get_entry_point(agent_config, agents)
+
+    entry_participant = next(
+        (p for p in agent_config.participants if p.is_entry_point),
+        agent_config.participants[0],
+    )
+    voice = resolve_voice(agent_config, entry_participant)
+
+    logger.info(
+        "Agent loaded: %s (%d participants, entry=%s, voice=%s)",
+        agent_config.name,
+        len(agent_config.participants),
+        entry_participant.name,
+        voice,
+    )
 
     userdata = SessionData(agent_id=agent_id, agents=agents)
 
-    # OpenAI Realtime API: speech-to-speech (no separate STT/TTS/Cartesia/Deepgram)
     session = AgentSession[SessionData](
         userdata=userdata,
-        llm=openai.realtime.RealtimeModel(voice="alloy"),
+        llm=openai.realtime.RealtimeModel(voice=voice),
         max_tool_steps=5,
     )
 
-    logger.info(
-        "starting session with entry=%s, %d participants",
-        entry._participant_name if hasattr(entry, "_participant_name") else "?",
-        len(agents),
+    await session.start(
+        agent=entry_agent,
+        room=ctx.room,
     )
 
-    await session.start(agent=entry, room=ctx.room)
-
-    # Trigger initial greeting so the agent speaks first (user hears something right away)
-    await session.generate_reply(instructions="Greet the user briefly and ask how you can help.")
 
 if __name__ == "__main__":
     cli.run_app(server)

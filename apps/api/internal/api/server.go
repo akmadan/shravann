@@ -32,7 +32,7 @@ func NewServer(s *store.Store, lkClient *lk.Client) http.Handler {
 		r.Patch("/{id}", h.UpdateUser)
 	})
 
-	// Projects and agents require X-User-ID
+	// Projects, agents, forms require X-User-ID
 	r.Group(func(r chi.Router) {
 		r.Use(RequireUserID)
 		r.Route("/projects", func(r chi.Router) {
@@ -47,6 +47,8 @@ func NewServer(s *store.Store, lkClient *lk.Client) http.Handler {
 			r.Delete("/{projectId}/members/{userId}", h.RemoveProjectMember)
 			r.Get("/{projectId}/agents", h.ListAgents)
 			r.Post("/{projectId}/agents", h.CreateAgent)
+			r.Get("/{projectId}/forms", h.ListForms)
+			r.Post("/{projectId}/forms", h.CreateForm)
 		})
 	})
 
@@ -72,6 +74,13 @@ func NewServer(s *store.Store, lkClient *lk.Client) http.Handler {
 	r.Route("/sessions", func(r chi.Router) {
 		r.Get("/{id}", h.GetSession)
 		r.Post("/{id}/end", h.EndSession)
+	})
+
+	// Forms by id (public GET for session app, auth-free PATCH/DELETE for dashboard)
+	r.Route("/forms", func(r chi.Router) {
+		r.Get("/{id}", h.GetForm)
+		r.Patch("/{id}", h.UpdateForm)
+		r.Delete("/{id}", h.DeleteForm)
 	})
 
 	return r
