@@ -297,6 +297,45 @@ export function deleteForm(id: string) {
   return request<null>(`/forms/${id}`, { method: "DELETE" });
 }
 
+// --- Project API Keys ---
+
+export interface APIKeyEntry {
+  provider: string;
+  is_set: boolean;
+  masked: string;
+}
+
+export function listAPIKeys(projectId: string, userId: string) {
+  return request<{ api_keys: APIKeyEntry[] }>(
+    `/projects/${projectId}/api-keys`,
+    { userId }
+  );
+}
+
+export function upsertAPIKey(
+  projectId: string,
+  provider: string,
+  key: string,
+  userId: string
+) {
+  return request<APIKeyEntry>(`/projects/${projectId}/api-keys`, {
+    method: "PUT",
+    userId,
+    body: JSON.stringify({ provider, key }),
+  });
+}
+
+export function deleteAPIKey(
+  projectId: string,
+  provider: string,
+  userId: string
+) {
+  return request<{ deleted: boolean }>(
+    `/projects/${projectId}/api-keys/${provider}`,
+    { method: "DELETE", userId }
+  );
+}
+
 // --- Sessions ---
 
 export function listSessions(
@@ -394,6 +433,15 @@ export interface Participant {
   updated_at: string;
 }
 
+export interface SessionTranscript {
+  id: string;
+  session_id: string;
+  role: "agent" | "user";
+  content: string;
+  position: number;
+  created_at: string;
+}
+
 export interface Session {
   id: string;
   agent_id: string;
@@ -404,6 +452,7 @@ export interface Session {
   started_at: string;
   ended_at?: string;
   created_at: string;
+  transcripts?: SessionTranscript[];
 }
 
 export type FormFieldType =

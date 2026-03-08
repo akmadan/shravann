@@ -9,8 +9,8 @@ import (
 	"github.com/shravann/api/internal/store"
 )
 
-func NewServer(s *store.Store, lkClient *lk.Client) http.Handler {
-	h := NewHandler(s, lkClient)
+func NewServer(s *store.Store, lkClient *lk.Client, encryptionKey []byte) http.Handler {
+	h := NewHandler(s, lkClient, encryptionKey)
 	r := chi.NewRouter()
 
 	r.Use(CORS)
@@ -49,6 +49,9 @@ func NewServer(s *store.Store, lkClient *lk.Client) http.Handler {
 			r.Post("/{projectId}/agents", h.CreateAgent)
 			r.Get("/{projectId}/forms", h.ListForms)
 			r.Post("/{projectId}/forms", h.CreateForm)
+			r.Get("/{projectId}/api-keys", h.ListAPIKeys)
+			r.Put("/{projectId}/api-keys", h.UpsertAPIKey)
+			r.Delete("/{projectId}/api-keys/{provider}", h.DeleteAPIKey)
 		})
 	})
 
@@ -74,6 +77,7 @@ func NewServer(s *store.Store, lkClient *lk.Client) http.Handler {
 	r.Route("/sessions", func(r chi.Router) {
 		r.Get("/{id}", h.GetSession)
 		r.Post("/{id}/end", h.EndSession)
+		r.Post("/{id}/transcripts", h.SaveTranscripts)
 	})
 
 	// Forms by id (public GET for session app, auth-free PATCH/DELETE for dashboard)

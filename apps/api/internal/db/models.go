@@ -54,6 +54,17 @@ type ProjectMember struct {
 
 func (ProjectMember) TableName() string { return "project_members" }
 
+type ProjectAPIKey struct {
+	ID           uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	ProjectID    uuid.UUID `gorm:"type:uuid;not null;index"`
+	Provider     string    `gorm:"type:text;not null"`
+	EncryptedKey []byte    `gorm:"type:bytea;not null"`
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+func (ProjectAPIKey) TableName() string { return "project_api_keys" }
+
 type Agent struct {
 	ID            uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
 	ProjectID     uuid.UUID      `gorm:"type:uuid;not null;index"`
@@ -174,6 +185,17 @@ type Session struct {
 }
 
 func (Session) TableName() string { return "sessions" }
+
+type SessionTranscript struct {
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	SessionID uuid.UUID `gorm:"type:uuid;not null;index"`
+	Role      string    `gorm:"type:text;not null"`
+	Content   string    `gorm:"type:text;not null"`
+	Position  int       `gorm:"not null;default:0"`
+	CreatedAt time.Time
+}
+
+func (SessionTranscript) TableName() string { return "session_transcripts" }
 
 // ProjectMemberWithUser is used for listing members with user details (join result).
 type ProjectMemberWithUser struct {

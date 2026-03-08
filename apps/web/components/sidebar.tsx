@@ -9,6 +9,7 @@ import {
   Bot,
   FileText,
   MessageSquare,
+  Settings,
 } from "lucide-react";
 
 const nav = [
@@ -17,6 +18,7 @@ const nav = [
   { label: "Agents", href: "/agents", icon: Bot },
   { label: "Forms", href: "/forms", icon: FileText },
   { label: "Sessions", href: "/sessions", icon: MessageSquare },
+  { label: "Settings", href: "/settings", icon: Settings },
 ];
 
 export default function Sidebar() {

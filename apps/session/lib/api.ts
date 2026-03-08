@@ -110,3 +110,13 @@ export function endSession(sessionId: string): Promise<{ id: string; status: str
     method: "POST",
   });
 }
+
+export function saveTranscripts(
+  sessionId: string,
+  transcripts: { role: string; content: string }[]
+): Promise<{ saved: number }> {
+  return request<{ saved: number }>(`/sessions/${sessionId}/transcripts`, {
+    method: "POST",
+    body: JSON.stringify({ transcripts }),
+  });
+}

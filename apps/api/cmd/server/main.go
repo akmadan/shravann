@@ -8,6 +8,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/shravann/api/internal/api"
 	"github.com/shravann/api/internal/config"
+	"github.com/shravann/api/internal/crypto"
 	"github.com/shravann/api/internal/db"
 	lk "github.com/shravann/api/internal/livekit"
 	"github.com/shravann/api/internal/store"
@@ -44,8 +45,20 @@ func main() {
 		log.Println("livekit: not configured (set LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET)")
 	}
 
+	var encKey []byte
+	if cfg.EncryptionKey != "" {
+		var err error
+		encKey, err = crypto.ParseHexKey(cfg.EncryptionKey)
+		if err != nil {
+			log.Fatalf("encryption key: %v", err)
+		}
+		log.Println("encryption: API key encryption enabled")
+	} else {
+		log.Println("encryption: ENCRYPTION_KEY not set — API key storage will be unavailable")
+	}
+
 	st := store.New(gormDB)
-	server := api.NewServer(st, lkClient)
+	server := api.NewServer(st, lkClient, encKey)
 
 	addr := ":" + strconv.Itoa(cfg.Port)
 	log.Printf("listening on %s", addr)

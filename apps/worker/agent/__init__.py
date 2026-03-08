@@ -1,5 +1,5 @@
 from .base import BaseAgent, SessionData
-from .db import AgentRow, ParticipantRow, load_agent
+from .db import AgentRow, ParticipantRow, load_agent, load_project_api_keys
 from .factory import build_agents, get_entry_point
 
 __all__ = [
@@ -8,6 +8,7 @@ __all__ = [
     "AgentRow",
     "ParticipantRow",
     "load_agent",
+    "load_project_api_keys",
     "build_agents",
     "get_entry_point",
 ]

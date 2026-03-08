@@ -1,10 +1,15 @@
 """Load agent config and participants from Postgres."""
 
 import json
+import logging
 import os
 from dataclasses import dataclass, field
 
 import psycopg
+
+from .crypto import decrypt, get_encryption_key
+
+logger = logging.getLogger("shravann.agent.db")
 
 
 @dataclass
@@ -100,3 +105,26 @@ def load_agent(agent_id: str) -> AgentRow:
                 )
 
     return agent
+
+
+def load_project_api_keys(project_id: str) -> dict[str, str]:
+    """Load and decrypt API keys for a project. Returns {provider: plaintext_key}."""
+    dsn = get_dsn()
+    enc_key = get_encryption_key()
+    keys: dict[str, str] = {}
+    with psycopg.connect(dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT provider, encrypted_key FROM project_api_keys WHERE project_id = %s",
+                (project_id,),
+            )
+            for provider, encrypted_key in cur.fetchall():
+                try:
+                    raw = encrypted_key
+                    if isinstance(raw, memoryview):
+                        raw = bytes(raw)
+                    plaintext = decrypt(raw, enc_key)
+                    keys[provider] = plaintext.decode("utf-8")
+                except Exception:
+                    logger.warning("Failed to decrypt key for provider %s", provider, exc_info=True)
+    return keys

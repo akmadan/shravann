@@ -32,6 +32,7 @@ import {
   Link2,
   Settings,
   FileText,
+  AlertTriangle,
 } from "lucide-react";
 import {
   createAgent,
@@ -41,13 +42,17 @@ import {
   deleteAgent,
   deleteParticipant,
   listForms,
+  listAPIKeys,
   type Project,
   type Agent,
   type Participant,
   type Form,
+  type APIKeyEntry,
 } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────
+
+type AgentProvider = "openai" | "google";
 
 interface ParticipantDraft {
   tempId: string;
@@ -55,8 +60,6 @@ interface ParticipantDraft {
   name: string;
   role: string;
   system_prompt: string;
-  model: string;
-  voice_provider: string;
   voice_id: string;
   handoff_description: string;
   is_entry_point: boolean;
@@ -109,8 +112,6 @@ function defaultSupervisor(): ParticipantDraft {
     role: "supervisor",
     system_prompt:
       "You are the supervisor agent. Greet the user and route them to the appropriate specialist based on their needs.",
-    model: "gpt-4o",
-    voice_provider: "",
     voice_id: "",
     handoff_description: "",
     is_entry_point: true,
@@ -125,8 +126,6 @@ function defaultChild(parentId: string, position: number): ParticipantDraft {
     name: "",
     role: "",
     system_prompt: "",
-    model: "gpt-4o",
-    voice_provider: "",
     voice_id: "",
     handoff_description: "",
     is_entry_point: false,
@@ -266,8 +265,6 @@ function buildPipelineLayout(participants: Participant[]): {
         name: p.name,
         role: p.role,
         system_prompt: p.system_prompt ?? "",
-        model: p.model ?? "gpt-4o",
-        voice_provider: p.voice_provider ?? "",
         voice_id: p.voice_id ?? "",
         handoff_description: p.handoff_description ?? "",
         is_entry_point: p.is_entry_point,
@@ -309,6 +306,7 @@ type BuilderContextValue = {
   updateParticipant: (nodeId: string, patch: Partial<ParticipantDraft>) => void;
   agentName: string;
   selectedFormName: string;
+  provider: AgentProvider;
 };
 
 const BuilderContext = createContext<BuilderContextValue | null>(null);
@@ -533,20 +531,33 @@ function AgentBuilderInner({
     () => initialAgent?.system_prompt ?? ""
   );
   const [language, setLanguage] = useState("en");
+  const [provider, setProvider] = useState<AgentProvider>(() => {
+    const m = initialAgent?.model ?? "openai";
+    return m === "google" ? "google" : "openai";
+  });
   const [selectedFormId, setSelectedFormId] = useState<string>(
     () => initialAgent?.form_id ?? ""
   );
   const [availableForms, setAvailableForms] = useState<Form[]>([]);
+  const [projectAPIKeys, setProjectAPIKeys] = useState<APIKeyEntry[]>([]);
 
   useEffect(() => {
     if (projectId) {
       listForms(projectId, userId)
         .then((res) => setAvailableForms(res.forms ?? []))
         .catch(() => setAvailableForms([]));
+      listAPIKeys(projectId, userId)
+        .then((res) => setProjectAPIKeys(res.api_keys ?? []))
+        .catch(() => setProjectAPIKeys([]));
     } else {
       setAvailableForms([]);
+      setProjectAPIKeys([]);
     }
   }, [projectId, userId]);
+
+  const providerKeyConfigured = projectAPIKeys.some(
+    (k) => k.provider === provider && k.is_set
+  );
 
   const selectedFormName = useMemo(() => {
     if (!selectedFormId) return "";
@@ -716,6 +727,7 @@ function AgentBuilderInner({
       updateParticipant,
       agentName,
       selectedFormName,
+      provider,
     }),
     [
       onAddChild,
@@ -725,6 +737,7 @@ function AgentBuilderInner({
       updateParticipant,
       agentName,
       selectedFormName,
+      provider,
     ]
   );
 
@@ -778,6 +791,7 @@ function AgentBuilderInner({
             name: agentName,
             slug: agentSlug,
             system_prompt: sharedContext,
+            model: provider,
             language,
             form_id: selectedFormId || "",
           })
@@ -787,6 +801,7 @@ function AgentBuilderInner({
               name: agentName,
               slug: agentSlug,
               system_prompt: sharedContext,
+              model: provider,
               language,
               form_id: formId,
             },
@@ -815,8 +830,6 @@ function AgentBuilderInner({
               name: p.name,
               role: p.role,
               system_prompt: p.system_prompt,
-              model: p.model,
-              voice_provider: p.voice_provider || undefined,
               voice_id: p.voice_id || undefined,
               handoff_description: p.handoff_description,
               is_entry_point: p.is_entry_point,
@@ -858,8 +871,6 @@ function AgentBuilderInner({
               name: p.name,
               role: p.role,
               system_prompt: p.system_prompt,
-              model: p.model,
-              voice_provider: p.voice_provider || undefined,
               voice_id: p.voice_id || undefined,
               handoff_description: p.handoff_description,
               is_entry_point: p.is_entry_point,
@@ -884,6 +895,7 @@ function AgentBuilderInner({
     agentName,
     agentSlug,
     sharedContext,
+    provider,
     language,
     selectedFormId,
     userId,
@@ -1020,6 +1032,22 @@ function AgentBuilderInner({
           </div>
         </div>
 
+        {!providerKeyConfigured && projectId && (
+          <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/5 px-4 py-2 text-xs text-amber-400">
+            <AlertTriangle size={14} className="shrink-0" />
+            <span>
+              {provider === "google" ? "Google" : "OpenAI"} API key is not
+              configured for this project. Agents will not work without it.{" "}
+              <a
+                href="/settings"
+                className="font-medium underline hover:text-amber-300"
+              >
+                Go to Settings
+              </a>
+            </span>
+          </div>
+        )}
+
         <div className="flex min-h-0 flex-1 overflow-hidden">
           {/* React Flow canvas */}
           <div className="min-w-0 flex-1 overflow-hidden">
@@ -1069,6 +1097,8 @@ function AgentBuilderInner({
               projectId={projectId}
               setProjectId={setProjectId}
               projects={projects}
+              provider={provider}
+              setProvider={setProvider}
               sharedContext={sharedContext}
               setSharedContext={setSharedContext}
               onClose={() => setSelectedId(null)}
@@ -1119,6 +1149,8 @@ function ConfigPanel({
   projectId,
   setProjectId,
   projects,
+  provider,
+  setProvider,
   sharedContext,
   setSharedContext,
   onClose,
@@ -1129,6 +1161,8 @@ function ConfigPanel({
   projectId: string;
   setProjectId: (v: string) => void;
   projects: Project[];
+  provider: AgentProvider;
+  setProvider: (v: AgentProvider) => void;
   sharedContext: string;
   setSharedContext: (v: string) => void;
   onClose: () => void;
@@ -1179,6 +1213,21 @@ function ConfigPanel({
               </option>
             ))}
           </select>
+        </Field>
+        <Field label="Provider">
+          <select
+            value={provider}
+            onChange={(e) => setProvider(e.target.value as AgentProvider)}
+            className={INPUT}
+          >
+            <option value="openai">OpenAI Realtime</option>
+            <option value="google">Google Gemini Live</option>
+          </select>
+          <p className="mt-1 text-[10px] text-[#52525b]">
+            {provider === "openai"
+              ? "Uses OpenAI Realtime API for speech-to-speech"
+              : "Uses Gemini Live API for speech-to-speech"}
+          </p>
         </Field>
         <Field label="Shared Context">
           <textarea
@@ -1279,6 +1328,8 @@ function ParticipantPanel({
   onUpdate: (patch: Partial<ParticipantDraft>) => void;
   onClose: () => void;
 }) {
+  const { provider } = useBuilder();
+
   if (!selected) {
     return <PanelEmpty />;
   }
@@ -1354,43 +1405,45 @@ function ParticipantPanel({
             className={`${INPUT} resize-none`}
           />
         </Field>
-        <Field label="Model">
+        <Field label="Voice">
           <select
-            value={selected.model}
-            onChange={(e) => onUpdate({ model: e.target.value })}
+            value={selected.voice_id}
+            onChange={(e) => onUpdate({ voice_id: e.target.value })}
             className={INPUT}
           >
-            <option value="gpt-4o">GPT-4o</option>
-            <option value="gpt-4o-mini">GPT-4o Mini</option>
-            <option value="gpt-4.1">GPT-4.1</option>
-            <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
+            <option value="">Default</option>
+            {provider === "google" ? (
+              <>
+                <option value="Puck">Puck</option>
+                <option value="Charon">Charon</option>
+                <option value="Zephyr">Zephyr</option>
+              </>
+            ) : (
+              <>
+                <optgroup label="Classic">
+                  <option value="alloy">Alloy</option>
+                  <option value="echo">Echo</option>
+                  <option value="fable">Fable</option>
+                  <option value="onyx">Onyx</option>
+                  <option value="nova">Nova</option>
+                  <option value="shimmer">Shimmer</option>
+                </optgroup>
+                <optgroup label="New">
+                  <option value="ash">Ash</option>
+                  <option value="ballad">Ballad</option>
+                  <option value="coral">Coral</option>
+                  <option value="sage">Sage</option>
+                  <option value="verse">Verse</option>
+                  <option value="marin">Marin</option>
+                  <option value="cedar">Cedar</option>
+                </optgroup>
+              </>
+            )}
           </select>
+          <p className="mt-1 text-[10px] text-[#52525b]">
+            Voice used for the realtime session (entry participant)
+          </p>
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Voice Provider">
-            <select
-              value={selected.voice_provider}
-              onChange={(e) =>
-                onUpdate({ voice_provider: e.target.value })
-              }
-              className={INPUT}
-            >
-              <option value="">None</option>
-              <option value="cartesia">Cartesia</option>
-              <option value="openai">OpenAI</option>
-              <option value="deepgram">Deepgram</option>
-            </select>
-          </Field>
-          <Field label="Voice ID">
-            <input
-              type="text"
-              value={selected.voice_id}
-              onChange={(e) => onUpdate({ voice_id: e.target.value })}
-              placeholder="voice-uuid"
-              className={INPUT}
-            />
-          </Field>
-        </div>
         {selected.is_entry_point && (
           <div className="rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-2">
             <p className="text-[11px] text-amber-400/90">

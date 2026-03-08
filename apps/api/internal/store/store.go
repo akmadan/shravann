@@ -414,3 +414,51 @@ func (s *Store) DeleteFormField(ctx context.Context, id string) error {
 func (s *Store) DeleteFormFieldsByForm(ctx context.Context, formID string) error {
 	return s.db.WithContext(ctx).Where("form_id = ?", formID).Delete(&db.FormField{}).Error
 }
+
+// --- Session Transcripts ---
+
+func (s *Store) CreateSessionTranscripts(ctx context.Context, transcripts []db.SessionTranscript) error {
+	if len(transcripts) == 0 {
+		return nil
+	}
+	return s.db.WithContext(ctx).Create(&transcripts).Error
+}
+
+func (s *Store) ListSessionTranscripts(ctx context.Context, sessionID string) ([]db.SessionTranscript, error) {
+	var list []db.SessionTranscript
+	err := s.db.WithContext(ctx).Where("session_id = ?", sessionID).Order("position ASC").Find(&list).Error
+	return list, err
+}
+
+// --- Project API Keys ---
+
+func (s *Store) UpsertProjectAPIKey(ctx context.Context, key *db.ProjectAPIKey) error {
+	var existing db.ProjectAPIKey
+	err := s.db.WithContext(ctx).
+		Where("project_id = ? AND provider = ?", key.ProjectID, key.Provider).
+		First(&existing).Error
+	if err == nil {
+		existing.EncryptedKey = key.EncryptedKey
+		return s.db.WithContext(ctx).Save(&existing).Error
+	}
+	return s.db.WithContext(ctx).Create(key).Error
+}
+
+func (s *Store) ListProjectAPIKeys(ctx context.Context, projectID string) ([]db.ProjectAPIKey, error) {
+	var list []db.ProjectAPIKey
+	err := s.db.WithContext(ctx).Where("project_id = ?", projectID).Order("provider ASC").Find(&list).Error
+	return list, err
+}
+
+func (s *Store) GetProjectAPIKey(ctx context.Context, projectID, provider string) (*db.ProjectAPIKey, error) {
+	var key db.ProjectAPIKey
+	err := s.db.WithContext(ctx).Where("project_id = ? AND provider = ?", projectID, provider).First(&key).Error
+	if err != nil {
+		return nil, err
+	}
+	return &key, nil
+}
+
+func (s *Store) DeleteProjectAPIKey(ctx context.Context, projectID, provider string) error {
+	return s.db.WithContext(ctx).Where("project_id = ? AND provider = ?", projectID, provider).Delete(&db.ProjectAPIKey{}).Error
+}

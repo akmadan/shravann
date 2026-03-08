@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/shravann/api/internal/crypto"
 	"github.com/shravann/api/internal/db"
 	lk "github.com/shravann/api/internal/livekit"
 	"github.com/shravann/api/internal/store"
@@ -15,12 +16,13 @@ import (
 )
 
 type Handler struct {
-	store   *store.Store
-	livekit *lk.Client
+	store         *store.Store
+	livekit       *lk.Client
+	encryptionKey []byte // 32-byte AES-256 key for API key encryption
 }
 
-func NewHandler(s *store.Store, lkClient *lk.Client) *Handler {
-	return &Handler{store: s, livekit: lkClient}
+func NewHandler(s *store.Store, lkClient *lk.Client, encryptionKey []byte) *Handler {
+	return &Handler{store: s, livekit: lkClient, encryptionKey: encryptionKey}
 }
 
 // --- Users ---
@@ -657,7 +659,53 @@ func (h *Handler) GetSession(w http.ResponseWriter, r *http.Request) {
 		Err(w, err)
 		return
 	}
-	JSON(w, http.StatusOK, sessionResp(sess))
+	resp := sessionResp(sess)
+	transcripts, err := h.store.ListSessionTranscripts(r.Context(), id)
+	if err == nil && len(transcripts) > 0 {
+		out := make([]map[string]any, len(transcripts))
+		for i := range transcripts {
+			out[i] = sessionTranscriptResp(&transcripts[i])
+		}
+		resp["transcripts"] = out
+	}
+	JSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) SaveTranscripts(w http.ResponseWriter, r *http.Request) {
+	sessionID := chi.URLParam(r, "id")
+	sid, err := uuid.Parse(sessionID)
+	if err != nil {
+		http.Error(w, `{"error":"invalid session id"}`, http.StatusBadRequest)
+		return
+	}
+	var body struct {
+		Transcripts []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"transcripts"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, `{"error":"invalid body"}`, http.StatusBadRequest)
+		return
+	}
+	if len(body.Transcripts) == 0 {
+		JSON(w, http.StatusOK, map[string]any{"saved": 0})
+		return
+	}
+	rows := make([]db.SessionTranscript, len(body.Transcripts))
+	for i, t := range body.Transcripts {
+		rows[i] = db.SessionTranscript{
+			SessionID: sid,
+			Role:      t.Role,
+			Content:   t.Content,
+			Position:  i,
+		}
+	}
+	if err := h.store.CreateSessionTranscripts(r.Context(), rows); err != nil {
+		Err(w, err)
+		return
+	}
+	JSON(w, http.StatusCreated, map[string]any{"saved": len(rows)})
 }
 
 func (h *Handler) ListSessions(w http.ResponseWriter, r *http.Request) {
@@ -1226,4 +1274,119 @@ func sessionResp(s *db.Session) map[string]any {
 		r["ended_at"] = s.EndedAt
 	}
 	return r
+}
+
+func sessionTranscriptResp(t *db.SessionTranscript) map[string]any {
+	return map[string]any{
+		"id":         t.ID.String(),
+		"session_id": t.SessionID.String(),
+		"role":       t.Role,
+		"content":    t.Content,
+		"position":   t.Position,
+		"created_at": t.CreatedAt,
+	}
+}
+
+// --- Project API Keys ---
+
+var validProviders = map[string]bool{
+	"openai": true,
+	"google": true,
+}
+
+func (h *Handler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	keys, err := h.store.ListProjectAPIKeys(r.Context(), projectID)
+	if err != nil {
+		Err(w, err)
+		return
+	}
+	configured := make(map[string]map[string]any, len(keys))
+	for i := range keys {
+		plaintext, err := crypto.Decrypt(keys[i].EncryptedKey, h.encryptionKey)
+		masked := "****"
+		if err == nil {
+			masked = crypto.MaskKey(string(plaintext))
+		}
+		configured[keys[i].Provider] = map[string]any{
+			"provider": keys[i].Provider,
+			"is_set":   true,
+			"masked":   masked,
+		}
+	}
+	out := make([]map[string]any, 0, len(validProviders))
+	for p := range validProviders {
+		if entry, ok := configured[p]; ok {
+			out = append(out, entry)
+		} else {
+			out = append(out, map[string]any{
+				"provider": p,
+				"is_set":   false,
+				"masked":   "",
+			})
+		}
+	}
+	JSON(w, http.StatusOK, map[string]any{"api_keys": out})
+}
+
+func (h *Handler) UpsertAPIKey(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	if len(h.encryptionKey) == 0 {
+		http.Error(w, `{"error":"encryption not configured on server"}`, http.StatusServiceUnavailable)
+		return
+	}
+	pid, err := uuid.Parse(projectID)
+	if err != nil {
+		BadRequest(w, "invalid project id")
+		return
+	}
+	var body struct {
+		Provider string `json:"provider"`
+		Key      string `json:"key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		BadRequest(w, "invalid JSON")
+		return
+	}
+	if !validProviders[body.Provider] {
+		BadRequest(w, "unsupported provider")
+		return
+	}
+	if body.Key == "" {
+		BadRequest(w, "key is required")
+		return
+	}
+	encrypted, err := crypto.Encrypt([]byte(body.Key), h.encryptionKey)
+	if err != nil {
+		Err(w, err)
+		return
+	}
+	key := &db.ProjectAPIKey{
+		ProjectID:    pid,
+		Provider:     body.Provider,
+		EncryptedKey: encrypted,
+	}
+	if err := h.store.UpsertProjectAPIKey(r.Context(), key); err != nil {
+		Err(w, err)
+		return
+	}
+	JSON(w, http.StatusOK, map[string]any{
+		"provider": body.Provider,
+		"is_set":   true,
+		"masked":   crypto.MaskKey(body.Key),
+	})
+}
+
+func (h *Handler) DeleteAPIKey(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "projectId")
+	provider := chi.URLParam(r, "provider")
+	if !validProviders[provider] {
+		BadRequest(w, "unsupported provider")
+		return
+	}
+	if err := h.store.DeleteProjectAPIKey(r.Context(), projectID, provider); err != nil {
+		Err(w, err)
+		return
+	}
+	JSON(w, http.StatusOK, map[string]any{"deleted": true})
 }

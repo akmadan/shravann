@@ -12,6 +12,8 @@ type Config struct {
 	LiveKitURL       string
 	LiveKitAPIKey    string
 	LiveKitAPISecret string
+
+	EncryptionKey string // hex-encoded 32-byte key for encrypting API keys at rest
 }
 
 func Load() Config {
@@ -31,5 +33,6 @@ func Load() Config {
 		LiveKitURL:       os.Getenv("LIVEKIT_URL"),
 		LiveKitAPIKey:    os.Getenv("LIVEKIT_API_KEY"),
 		LiveKitAPISecret: os.Getenv("LIVEKIT_API_SECRET"),
+		EncryptionKey:    os.Getenv("ENCRYPTION_KEY"),
 	}
 }
