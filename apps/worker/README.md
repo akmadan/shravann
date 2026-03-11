@@ -33,4 +33,4 @@ pip install -r requirements.txt
 python main.py start
 ```
 
-With Docker: build the image and run the container; the default command is `python main.py start`.
+With Docker: build the image and run the container; the default command is `python main.py start`
