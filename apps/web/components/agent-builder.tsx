@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ReactFlow,
@@ -1293,12 +1294,12 @@ function FormPanel({
           <div className="rounded-md border border-[#27272a] bg-[#18181b] px-3 py-3">
             <p className="text-[12px] text-[#71717a]">
               No forms yet.{" "}
-              <a
+              <Link
                 href="/forms/new"
                 className="text-[#3b82f6] hover:underline"
               >
                 Create one
-              </a>{" "}
+              </Link>{" "}
               to collect user info before sessions.
             </p>
           </div>
