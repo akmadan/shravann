@@ -8,14 +8,16 @@ import (
 )
 
 type User struct {
-	ID             uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
-	Email          string    `gorm:"type:text;not null;uniqueIndex"`
-	Name           string    `gorm:"type:text;not null"`
-	AvatarURL      *string   `gorm:"column:avatar_url;type:text"`
-	AuthProvider   string    `gorm:"column:auth_provider;type:text;not null;uniqueIndex:idx_users_auth"`
-	AuthProviderID string    `gorm:"column:auth_provider_id;type:text;not null;uniqueIndex:idx_users_auth"`
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID                 uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Email              string    `gorm:"type:text;not null;uniqueIndex"`
+	Name               string    `gorm:"type:text;not null"`
+	AvatarURL          *string   `gorm:"column:avatar_url;type:text"`
+	AuthProvider       string    `gorm:"column:auth_provider;type:text;uniqueIndex:idx_users_auth"`
+	AuthProviderID     string    `gorm:"column:auth_provider_id;type:text;uniqueIndex:idx_users_auth"`
+	PasswordHash       *string   `gorm:"column:password_hash;type:text"`
+	MustChangePassword bool      `gorm:"column:must_change_password;not null;default:false"`
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 func (User) TableName() string { return "users" }

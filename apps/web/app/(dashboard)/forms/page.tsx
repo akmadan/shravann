@@ -20,10 +20,10 @@ export default function FormsPage() {
     if (!ready) return;
     (async () => {
       try {
-        const { projects } = await listProjects(backendUser!.id);
+        const { projects } = await listProjects();
         const all: FormWithProject[] = [];
         for (const p of projects ?? []) {
-          const { forms: pForms } = await listForms(p.id, backendUser!.id);
+          const { forms: pForms } = await listForms(p.id);
           for (const f of pForms ?? []) {
             all.push({ ...f, projectName: p.name });
           }
@@ -35,7 +35,7 @@ export default function FormsPage() {
         setLoading(false);
       }
     })();
-  }, [ready, backendUser]);
+  }, [ready]);
 
   if (userLoading) return <Spinner />;
   if (syncError) return <SyncError />;

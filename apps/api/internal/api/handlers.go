@@ -19,10 +19,11 @@ type Handler struct {
 	store         *store.Store
 	livekit       *lk.Client
 	encryptionKey []byte // 32-byte AES-256 key for API key encryption
+	jwtSecret     []byte
 }
 
-func NewHandler(s *store.Store, lkClient *lk.Client, encryptionKey []byte) *Handler {
-	return &Handler{store: s, livekit: lkClient, encryptionKey: encryptionKey}
+func NewHandler(s *store.Store, lkClient *lk.Client, encryptionKey, jwtSecret []byte) *Handler {
+	return &Handler{store: s, livekit: lkClient, encryptionKey: encryptionKey, jwtSecret: jwtSecret}
 }
 
 // --- Users ---

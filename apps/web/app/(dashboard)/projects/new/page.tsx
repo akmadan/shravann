@@ -26,15 +26,11 @@ export default function NewProjectPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!backendUser?.id) {
-      setError("User not loaded yet. Please wait a moment and try again.");
-      return;
-    }
     if (!name || !slug) return;
     setLoading(true);
     setError("");
     try {
-      await createProject({ name, slug }, backendUser.id);
+      await createProject({ name, slug });
       router.push("/projects");
     } catch (err: unknown) {
       setError(

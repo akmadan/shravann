@@ -494,14 +494,12 @@ const nodeTypes = {
 function AgentBuilderInner({
   projects,
   preselectedProject,
-  userId,
   agentId,
   initialAgent,
   initialParticipants,
 }: {
   projects: Project[];
   preselectedProject: string;
-  userId: string;
   agentId?: string;
   initialAgent?: Agent | null;
   initialParticipants?: Participant[] | null;
@@ -543,17 +541,17 @@ function AgentBuilderInner({
 
   useEffect(() => {
     if (projectId) {
-      listForms(projectId, userId)
+      listForms(projectId)
         .then((res) => setAvailableForms(res.forms ?? []))
         .catch(() => setAvailableForms([]));
-      listAPIKeys(projectId, userId)
+      listAPIKeys(projectId)
         .then((res) => setProjectAPIKeys(res.api_keys ?? []))
         .catch(() => setProjectAPIKeys([]));
     } else {
       setAvailableForms([]);
       setProjectAPIKeys([]);
     }
-  }, [projectId, userId]);
+  }, [projectId]);
 
   const providerKeyConfigured = projectAPIKeys.some(
     (k) => k.provider === provider && k.is_set
@@ -804,8 +802,7 @@ function AgentBuilderInner({
               model: provider,
               language,
               form_id: formId,
-            },
-            userId
+            }
           );
 
       const currentNodeIds = new Set(participantNodes.map((n) => n.id));
@@ -898,7 +895,6 @@ function AgentBuilderInner({
     provider,
     language,
     selectedFormId,
-    userId,
     nodes,
     edges,
     initialParticipantIds,
@@ -1486,14 +1482,12 @@ function Field({
 export default function AgentBuilder({
   projects,
   preselectedProject,
-  userId,
   agentId,
   initialAgent,
   initialParticipants,
 }: {
   projects: Project[];
   preselectedProject: string;
-  userId: string;
   agentId?: string;
   initialAgent?: Agent | null;
   initialParticipants?: Participant[] | null;
@@ -1504,7 +1498,6 @@ export default function AgentBuilder({
         <AgentBuilderInner
           projects={projects}
           preselectedProject={preselectedProject}
-          userId={userId}
           agentId={agentId}
           initialAgent={initialAgent}
           initialParticipants={initialParticipants}

@@ -1,5 +1,29 @@
-
+# Environment files (may contain secrets)
 .env
+.env.local
+.env.*.local
+
+# Python
 venv/
+__pycache__/
+*.pyc
+
+# Node
 node_modules/
 .next/
+
+# Go
+/apps/api/tmp/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/

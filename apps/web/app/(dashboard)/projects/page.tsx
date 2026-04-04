@@ -15,11 +15,11 @@ export default function ProjectsPage() {
   useEffect(() => {
     if (!ready) return;
     setLoading(true);
-    listProjects(backendUser!.id)
+    listProjects()
       .then((res) => setProjects(res.projects ?? []))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [ready, backendUser]);
+  }, [ready]);
 
   if (userLoading) return <Spinner />;
   if (syncError) return <SyncError />;

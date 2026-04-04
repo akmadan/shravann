@@ -9,8 +9,6 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.38.2",
-    "@clerk/themes": "^2.4.55",
     "@xyflow/react": "^12.10.1",
     "lucide-react": "^0.575.0",
     "next": "16.1.6",

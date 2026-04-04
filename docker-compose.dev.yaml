@@ -1,0 +1,29 @@
+# Development override — builds images from source instead of pulling from DockerHub.
+# Usage: docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up --build
+
+services:
+  api:
+    image: shravann-api:dev
+    build:
+      context: ./apps/api
+
+  worker:
+    image: shravann-worker:dev
+    build:
+      context: ./apps/worker
+
+  web:
+    image: shravann-web:dev
+    build:
+      context: ./apps/web
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8080
+        NEXT_PUBLIC_SESSION_APP_URL: http://localhost:3001
+
+  session:
+    image: shravann-session:dev
+    build:
+      context: ./apps/session
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8080
+        NEXT_PUBLIC_LIVEKIT_URL: ${LIVEKIT_URL:-ws://localhost:7880}

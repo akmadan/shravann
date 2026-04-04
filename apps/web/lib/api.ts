@@ -1,17 +1,16 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
-async function request<T>(
-  path: string,
-  opts: RequestInit & { userId?: string } = {}
-): Promise<T> {
-  const { userId, ...init } = opts;
+async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...(init.headers as Record<string, string>),
+    ...(opts.headers as Record<string, string>),
   };
-  if (userId) headers["X-User-ID"] = userId;
 
-  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
+  const res = await fetch(`${API_URL}${path}`, {
+    ...opts,
+    headers,
+    credentials: "include",
+  });
   if (res.status === 204) return null as T;
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -53,91 +52,72 @@ export function getUser(id: string) {
 
 // --- Projects ---
 
-export function listProjects(userId: string) {
-  return request<{ projects: Project[] }>("/projects", { userId });
+export function listProjects() {
+  return request<{ projects: Project[] }>("/projects");
 }
 
-export function getProject(id: string, userId: string) {
-  return request<Project>(`/projects/${id}`, { userId });
+export function getProject(id: string) {
+  return request<Project>(`/projects/${id}`);
 }
 
-export function createProject(
-  data: { name: string; slug: string },
-  userId: string
-) {
+export function createProject(data: { name: string; slug: string }) {
   return request<Project>("/projects", {
     method: "POST",
     body: JSON.stringify(data),
-    userId,
   });
 }
 
 export function updateProject(
   id: string,
-  data: { name?: string; slug?: string },
-  userId: string
+  data: { name?: string; slug?: string }
 ) {
   return request<Project>(`/projects/${id}`, {
     method: "PATCH",
     body: JSON.stringify(data),
-    userId,
   });
 }
 
-export function deleteProject(id: string, userId: string) {
-  return request<null>(`/projects/${id}`, { method: "DELETE", userId });
+export function deleteProject(id: string) {
+  return request<null>(`/projects/${id}`, { method: "DELETE" });
 }
 
 // --- Members ---
 
-export function listMembers(projectId: string, userId: string) {
-  return request<{ members: Member[] }>(`/projects/${projectId}/members`, {
-    userId,
-  });
+export function listMembers(projectId: string) {
+  return request<{ members: Member[] }>(`/projects/${projectId}/members`);
 }
 
 export function addMember(
   projectId: string,
-  data: { user_id: string; role?: string },
-  userId: string
+  data: { user_id: string; role?: string }
 ) {
   return request<Member>(`/projects/${projectId}/members`, {
     method: "POST",
     body: JSON.stringify(data),
-    userId,
   });
 }
 
 export function updateMemberRole(
   projectId: string,
   memberId: string,
-  role: string,
-  userId: string
+  role: string
 ) {
   return request<Member>(`/projects/${projectId}/members/${memberId}`, {
     method: "PATCH",
     body: JSON.stringify({ role }),
-    userId,
   });
 }
 
-export function removeMember(
-  projectId: string,
-  memberId: string,
-  userId: string
-) {
+export function removeMember(projectId: string, memberId: string) {
   return request<null>(`/projects/${projectId}/members/${memberId}`, {
     method: "DELETE",
-    userId,
   });
 }
 
 // --- Agents ---
 
-export function listAgents(projectId: string, userId: string) {
-  return request<{ agents: Agent[] }>(`/projects/${projectId}/agents`, {
-    userId,
-  });
+export function listAgents(projectId: string) {
+  return request<{ agents: Agent[] }>(`/projects/${projectId}/agents`);
 }
 
 export function getAgent(id: string) {
@@ -155,13 +135,11 @@ export function createAgent(
     language?: string;
     session_start_input_schema?: SessionStartField[];
     form_id?: string;
-  },
-  userId: string
+  }
 ) {
   return request<Agent>(`/projects/${projectId}/agents`, {
     method: "POST",
     body: JSON.stringify(data),
-    userId,
   });
 }
 
@@ -251,10 +229,8 @@ export function deleteParticipant(agentId: string, participantId: string) {
 
 // --- Forms ---
 
-export function listForms(projectId: string, userId: string) {
-  return request<{ forms: Form[] }>(`/projects/${projectId}/forms`, {
-    userId,
-  });
+export function listForms(projectId: string) {
+  return request<{ forms: Form[] }>(`/projects/${projectId}/forms`);
 }
 
 export function getForm(id: string) {
@@ -268,13 +244,11 @@ export function createForm(
     slug: string;
     description?: string;
     fields?: FormFieldDraft[];
-  },
-  userId: string
+  }
 ) {
   return request<Form>(`/projects/${projectId}/forms`, {
     method: "POST",
     body: JSON.stringify(data),
-    userId,
   });
 }
 
@@ -305,34 +279,27 @@ export interface APIKeyEntry {
   masked: string;
 }
 
-export function listAPIKeys(projectId: string, userId: string) {
+export function listAPIKeys(projectId: string) {
   return request<{ api_keys: APIKeyEntry[] }>(
-    `/projects/${projectId}/api-keys`,
-    { userId }
+    `/projects/${projectId}/api-keys`
   );
 }
 
 export function upsertAPIKey(
   projectId: string,
   provider: string,
-  key: string,
-  userId: string
+  key: string
 ) {
   return request<APIKeyEntry>(`/projects/${projectId}/api-keys`, {
     method: "PUT",
-    userId,
     body: JSON.stringify({ provider, key }),
   });
 }
 
-export function deleteAPIKey(
-  projectId: string,
-  provider: string,
-  userId: string
-) {
+export function deleteAPIKey(projectId: string, provider: string) {
   return request<{ deleted: boolean }>(
     `/projects/${projectId}/api-keys/${provider}`,
-    { method: "DELETE", userId }
+    { method: "DELETE" }
   );
 }
 
@@ -364,8 +331,8 @@ export interface User {
   email: string;
   name: string;
   avatar_url?: string;
-  auth_provider: string;
-  auth_provider_id: string;
+  auth_provider?: string;
+  auth_provider_id?: string;
   created_at: string;
   updated_at: string;
 }

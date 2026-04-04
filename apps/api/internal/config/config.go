@@ -14,6 +14,7 @@ type Config struct {
 	LiveKitAPISecret string
 
 	EncryptionKey string // hex-encoded 32-byte key for encrypting API keys at rest
+	JWTSecret     string // secret for signing auth JWTs; random key generated if empty
 }
 
 func Load() Config {
@@ -34,5 +35,6 @@ func Load() Config {
 		LiveKitAPIKey:    os.Getenv("LIVEKIT_API_KEY"),
 		LiveKitAPISecret: os.Getenv("LIVEKIT_API_SECRET"),
 		EncryptionKey:    os.Getenv("ENCRYPTION_KEY"),
+		JWTSecret:        os.Getenv("JWT_SECRET"),
 	}
 }

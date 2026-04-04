@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { UserButton } from "@clerk/nextjs";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -10,7 +9,9 @@ import {
   FileText,
   MessageSquare,
   Settings,
+  LogOut,
 } from "lucide-react";
+import { useBackendUser } from "@/lib/user-sync";
 
 const nav = [
   { label: "Overview", href: "/", icon: LayoutDashboard },
@@ -23,6 +24,7 @@ const nav = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { backendUser, logout } = useBackendUser();
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
@@ -61,12 +63,27 @@ export default function Sidebar() {
       </nav>
 
       <div className="border-t border-white/[0.06] px-4 py-3">
-        <div className="flex items-center gap-2.5">
-          <UserButton
-            afterSignOutUrl="/sign-in"
-            appearance={{ elements: { avatarBox: "h-7 w-7" } }}
-          />
-          <span className="text-[13px] text-[#71717a]">Account</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/[0.08] text-xs font-medium text-[#a1a1aa]">
+              {(backendUser?.name ?? "U").charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-medium text-white">
+                {backendUser?.name ?? "User"}
+              </p>
+              <p className="truncate text-[11px] text-[#52525b]">
+                {backendUser?.email}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={logout}
+            title="Sign out"
+            className="rounded-md p-1.5 text-[#52525b] transition-colors hover:bg-white/[0.04] hover:text-white"
+          >
+            <LogOut size={14} />
+          </button>
         </div>
       </div>
     </aside>

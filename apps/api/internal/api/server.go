@@ -9,8 +9,8 @@ import (
 	"github.com/shravann/api/internal/store"
 )
 
-func NewServer(s *store.Store, lkClient *lk.Client, encryptionKey []byte) http.Handler {
-	h := NewHandler(s, lkClient, encryptionKey)
+func NewServer(s *store.Store, lkClient *lk.Client, encryptionKey, jwtSecret []byte) http.Handler {
+	h := NewHandler(s, lkClient, encryptionKey, jwtSecret)
 	r := chi.NewRouter()
 
 	r.Use(CORS)
@@ -24,17 +24,29 @@ func NewServer(s *store.Store, lkClient *lk.Client, encryptionKey []byte) http.H
 		w.Write([]byte("ok"))
 	})
 
-	r.Post("/auth/sync", h.SyncUser)
+	// Public auth endpoints
+	r.Post("/auth/login", h.Login)
+	r.Post("/auth/register", h.Register)
+	r.Post("/auth/logout", h.Logout)
 
+	// Authenticated auth endpoints
+	r.Group(func(r chi.Router) {
+		r.Use(RequireAuth(jwtSecret))
+		r.Get("/auth/me", h.Me)
+		r.Patch("/auth/password", h.ChangePassword)
+	})
+
+	// Legacy user CRUD (kept for backward compat)
+	r.Post("/auth/sync", h.SyncUser)
 	r.Route("/users", func(r chi.Router) {
 		r.Post("/", h.CreateUser)
 		r.Get("/{id}", h.GetUser)
 		r.Patch("/{id}", h.UpdateUser)
 	})
 
-	// Projects, agents, forms require X-User-ID
+	// Protected routes
 	r.Group(func(r chi.Router) {
-		r.Use(RequireUserID)
+		r.Use(RequireAuth(jwtSecret))
 		r.Route("/projects", func(r chi.Router) {
 			r.Get("/", h.ListProjects)
 			r.Post("/", h.CreateProject)
@@ -55,20 +67,18 @@ func NewServer(s *store.Store, lkClient *lk.Client, encryptionKey []byte) http.H
 		})
 	})
 
-	// Agents by id (no auth for now - e.g. public agent lookup)
+	// Agents by id (no auth for public agent lookup / session app)
 	r.Route("/agents", func(r chi.Router) {
 		r.Get("/{id}", h.GetAgent)
 		r.Patch("/{id}", h.UpdateAgent)
 		r.Delete("/{id}", h.DeleteAgent)
 
-		// Participants (sub-agents)
 		r.Get("/{id}/participants", h.ListParticipants)
 		r.Post("/{id}/participants", h.CreateParticipant)
 		r.Get("/{id}/participants/{pid}", h.GetParticipant)
 		r.Patch("/{id}/participants/{pid}", h.UpdateParticipant)
 		r.Delete("/{id}/participants/{pid}", h.DeleteParticipant)
 
-		// Sessions
 		r.Post("/{agentId}/sessions", h.CreateSession)
 		r.Get("/{agentId}/sessions", h.ListSessions)
 		r.Post("/{id}/sessions/start", h.StartSession)
@@ -80,7 +90,6 @@ func NewServer(s *store.Store, lkClient *lk.Client, encryptionKey []byte) http.H
 		r.Post("/{id}/transcripts", h.SaveTranscripts)
 	})
 
-	// Forms by id (public GET for session app, auth-free PATCH/DELETE for dashboard)
 	r.Route("/forms", func(r chi.Router) {
 		r.Get("/{id}", h.GetForm)
 		r.Patch("/{id}", h.UpdateForm)

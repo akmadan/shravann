@@ -84,13 +84,11 @@ function fromApiFields(fields: Form["fields"]): FieldDraftLocal[] {
 export default function FormBuilder({
   projects,
   preselectedProject,
-  userId,
   formId,
   initialForm,
 }: {
   projects: Project[];
   preselectedProject: string;
-  userId: string;
   formId?: string;
   initialForm?: Form | null;
 }) {
@@ -189,8 +187,7 @@ export default function FormBuilder({
       } else {
         const form = await createForm(
           projectId,
-          { name, slug, description, fields: fieldDrafts },
-          userId
+          { name, slug, description, fields: fieldDrafts }
         );
         router.push(`/forms/${form.id}`);
       }
@@ -207,7 +204,6 @@ export default function FormBuilder({
     slug,
     description,
     fields,
-    userId,
     router,
   ]);
 

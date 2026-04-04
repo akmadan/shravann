@@ -1,0 +1,6 @@
+.env
+.env.*
+.air.toml
+tmp/
+*.sqlite
+README.md

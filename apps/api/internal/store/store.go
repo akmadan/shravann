@@ -84,6 +84,22 @@ func (s *Store) UpsertUserByAuthProvider(ctx context.Context, u *db.User) (*db.U
 	return u, nil
 }
 
+func (s *Store) CountUsers(ctx context.Context) (int64, error) {
+	var count int64
+	err := s.db.WithContext(ctx).Model(&db.User{}).Count(&count).Error
+	return count, err
+}
+
+func (s *Store) UpdatePassword(ctx context.Context, userID string, hash string) error {
+	return s.db.WithContext(ctx).
+		Model(&db.User{}).
+		Where("id = ?", userID).
+		Updates(map[string]any{
+			"password_hash":        hash,
+			"must_change_password": false,
+		}).Error
+}
+
 // --- Projects ---
 
 func (s *Store) CreateProject(ctx context.Context, p *db.Project) error {

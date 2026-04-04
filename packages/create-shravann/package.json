@@ -1,0 +1,30 @@
+{
+  "name": "create-shravann",
+  "version": "0.1.0",
+  "description": "Spin up the Shravann voice AI platform with one command",
+  "license": "Apache-2.0",
+  "bin": {
+    "create-shravann": "index.mjs"
+  },
+  "type": "module",
+  "files": [
+    "index.mjs",
+    "docker-compose.yml"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "shravann",
+    "voice-ai",
+    "livekit",
+    "openai",
+    "realtime",
+    "agents"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/akshitmadan/shravann.git",
+    "directory": "packages/create-shravann"
+  }
+}

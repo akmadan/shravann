@@ -19,7 +19,7 @@ export default function EditFormPage({
   useEffect(() => {
     if (!ready) return;
     Promise.all([
-      listProjects(backendUser!.id).then((r) => r.projects ?? []),
+      listProjects().then((r) => r.projects ?? []),
       getForm(id),
     ])
       .then(([p, f]) => {
@@ -27,7 +27,7 @@ export default function EditFormPage({
         setForm(f);
       })
       .finally(() => setLoading(false));
-  }, [ready, backendUser, id]);
+  }, [ready, id]);
 
   if (userLoading || loading) return <Spinner />;
   if (syncError) return <SyncError />;
@@ -37,7 +37,6 @@ export default function EditFormPage({
     <FormBuilder
       projects={projects}
       preselectedProject=""
-      userId={backendUser.id}
       formId={id}
       initialForm={form}
     />

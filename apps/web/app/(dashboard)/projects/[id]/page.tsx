@@ -39,9 +39,9 @@ export default function ProjectDetailPage() {
     if (!ready || !id) return;
     setLoading(true);
     Promise.all([
-      getProject(id, backendUser!.id),
-      listAgents(id, backendUser!.id),
-      listMembers(id, backendUser!.id),
+      getProject(id),
+      listAgents(id),
+      listMembers(id),
     ])
       .then(([p, a, m]) => {
         setProject(p);
@@ -49,18 +49,16 @@ export default function ProjectDetailPage() {
         setMembers(m.members ?? []);
       })
       .finally(() => setLoading(false));
-  }, [ready, backendUser, id]);
+  }, [ready, id]);
 
   const handleRoleChange = async (memberId: string, role: string) => {
-    if (!backendUser?.id) return;
-    await updateMemberRole(id, memberId, role, backendUser.id);
-    const m = await listMembers(id, backendUser.id);
+    await updateMemberRole(id, memberId, role);
+    const m = await listMembers(id);
     setMembers(m.members ?? []);
   };
 
   const handleRemove = async (memberId: string) => {
-    if (!backendUser?.id) return;
-    await removeMember(id, memberId, backendUser.id);
+    await removeMember(id, memberId);
     setMembers((prev) => prev.filter((m) => m.user_id !== memberId));
   };
 

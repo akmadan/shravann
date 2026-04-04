@@ -30,10 +30,10 @@ function NewAgentLoader() {
 
   useEffect(() => {
     if (!ready) return;
-    listProjects(backendUser!.id)
+    listProjects()
       .then((res) => setProjects(res.projects ?? []))
       .finally(() => setLoading(false));
-  }, [ready, backendUser]);
+  }, [ready]);
 
   if (userLoading || loading) return <Spinner />;
   if (syncError) return <SyncError />;
@@ -43,7 +43,6 @@ function NewAgentLoader() {
     <AgentBuilder
       projects={projects}
       preselectedProject={preselectedProject}
-      userId={backendUser.id}
     />
   );
 }

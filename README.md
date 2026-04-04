@@ -1,6 +1,41 @@
 # Shravann
 
-A platform for building and deploying multi-agent voice AI systems. Design conversational agents with configurable participants, handoff logic, and voice personas — then run them as real-time voice sessions powered by LiveKit and OpenAI Realtime.
+A platform for building and deploying multi-agent voice AI systems. Design conversational agents with configurable participants, handoff logic, and voice personas — then run them as real-time voice sessions powered by LiveKit, OpenAI Realtime, and Google Gemini Live.
+
+## Quick Start
+
+The fastest way to run Shravann is with Docker. You only need [Docker Desktop](https://docs.docker.com/get-docker/) and a [LiveKit Cloud](https://livekit.io/) account.
+
+### Option 1: npx (one command)
+
+```bash
+npx create-shravann
+```
+
+This will prompt for your LiveKit credentials, generate secrets, pull all Docker images, and start the platform. When it's done you'll see:
+
+```
+  Dashboard       http://localhost:3000
+  Session App     http://localhost:3001
+  API             http://localhost:8080
+
+  Default login
+  Email:          admin@shravann.local
+  Password:       admin
+```
+
+### Option 2: Docker Compose (manual)
+
+```bash
+git clone https://github.com/akshitmadan/shravann.git
+cd shravann
+cp .env.example .env   # fill in LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET
+docker compose up -d
+```
+
+### Option 3: From source (for contributors)
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full development setup instructions.
 
 ## Architecture
 
@@ -26,10 +61,31 @@ A platform for building and deploying multi-agent voice AI systems. Design conve
 
 | App | Stack | Purpose |
 |-----|-------|---------|
-| **web** | Next.js, React, Tailwind, Clerk | Dashboard — create projects, design agents, view sessions |
+| **web** | Next.js, React, Tailwind | Dashboard — create projects, design agents, view sessions |
 | **api** | Go, Chi, GORM, Postgres | REST API — agent CRUD, session management, LiveKit room creation |
 | **session** | Next.js, LiveKit Client SDK | Voice UI — users join here to talk to agents |
-| **worker** | Python, LiveKit Agents SDK, OpenAI Realtime | Voice agent runtime — loads agent config from DB, runs real-time voice sessions |
+| **worker** | Python, LiveKit Agents SDK | Voice agent runtime — loads agent config from DB, runs real-time voice sessions |
+| **site** | Next.js | Landing page and marketing site |
+
+## Authentication
+
+Shravann uses built-in username/password authentication (no external auth provider required).
+
+On first startup, a default admin user is created:
+
+- **Email:** `admin@shravann.local`
+- **Password:** `admin`
+
+You will be prompted to change the password on first login. Authentication is handled via JWT tokens stored in httpOnly cookies.
+
+## Supported Voice Providers
+
+The worker dynamically loads the voice provider configured per agent:
+
+- **OpenAI Realtime** — GPT-4o real-time voice with voices like alloy, echo, nova, shimmer, coral, sage, etc.
+- **Google Gemini Live** — Gemini real-time voice with voices like Puck, Charon, Zephyr.
+
+Provider API keys are configured per-project in the dashboard Settings page and encrypted at rest (AES-256-GCM).
 
 ## The Agent Model
 
@@ -39,16 +95,14 @@ An **Agent** is a conversational AI definition. Each agent contains one or more 
 Agent
 ├── name, slug
 ├── system_prompt          ← shared context across all participants
-├── model                  ← default model
+├── model                  ← provider: "openai" or "google"
 ├── language
 ├── session_start_input_schema  ← form fields shown before session starts
 │
 ├── Participant (entry point)
 │   ├── name, role
 │   ├── system_prompt      ← participant-specific instructions
-│   ├── model              ← gpt-4o, gpt-4o-mini, gpt-4.1, etc.
-│   ├── voice_provider     ← OpenAI, Cartesia, Deepgram, or None
-│   ├── voice_id           ← voice identifier (e.g. "alloy", "shimmer")
+│   ├── voice_id           ← voice identifier (e.g. "alloy", "Puck")
 │   ├── handoff_description ← when should LLM hand off TO this participant
 │   └── is_entry_point: true
 │
@@ -71,8 +125,6 @@ Agent
 
 ## Session Flow
 
-This is the end-to-end sequence from a user clicking "Start session" to having a live voice conversation with an AI agent.
-
 ```
  ┌──────────┐    ┌─────────────┐    ┌──────────┐    ┌───────────┐    ┌──────────┐
  │  Browser  │    │ Session App │    │  Go API  │    │  LiveKit  │    │  Worker  │
@@ -91,86 +143,35 @@ This is the end-to-end sequence from a user clicking "Start session" to having a
       │  4. Submit form │               │                │               │
       │────────────────>│               │                │               │
       │                 │  5. POST /agents/{id}/sessions/start           │
-      │                 │     { identity, channel, session_start_data }  │
       │                 │──────────────>│                │               │
       │                 │               │                │               │
       │                 │               │  6. Create LiveKit room        │
-      │                 │               │     name: session-{agentId}__{ts}__{identity}
-      │                 │               │     metadata: { agent_id }     │
       │                 │               │───────────────>│               │
-      │                 │               │  <── room created ─────────────│
+      │                 │               │  <── room ─────│               │
       │                 │               │                │               │
       │                 │               │  7. Generate participant JWT   │
       │                 │               │  8. Insert session in Postgres │
       │                 │               │                │               │
       │                 │  <── { room_name, token, session } ───────────│
       │                 │               │                │               │
-      │                 │  9. Connect to LiveKit via WebSocket + token   │
+      │                 │  9. Connect to LiveKit via WebSocket           │
       │                 │──────────────────────────────>│               │
       │                 │               │                │               │
-      │  10. Voice room UI (mic, speaker, end call)     │               │
+      │  10. Voice room UI              │                │               │
       │<────────────────│               │                │               │
-      │                 │               │                │               │
-      │                 │               │  11. LiveKit dispatches job    │
+      │                 │               │  11. Dispatch job              │
       │                 │               │                │──────────────>│
       │                 │               │                │               │
-      │                 │               │                │  12. Worker reads agent_id
-      │                 │               │                │      from room metadata
+      │                 │               │                │  12. Load agent from DB
+      │                 │               │                │  13. Build participant agents
+      │                 │               │                │  14. Start AgentSession
       │                 │               │                │               │
-      │                 │               │                │  13. load_agent(agent_id)
-      │                 │               │                │      from Postgres
+      │  15. Bidirectional voice (WebRTC) ◀────────────────────────────>│
       │                 │               │                │               │
-      │                 │               │                │  14. Build participant agents
-      │                 │               │                │      with handoff tools
-      │                 │               │                │               │
-      │                 │               │                │  15. Start AgentSession
-      │                 │               │                │      (OpenAI Realtime)
-      │                 │               │                │               │
-      │  16. Bidirectional voice (WebRTC) ◀────────────────────────────>│
-      │                 │               │                │               │
-      │  17. End call   │               │                │               │
-      │────────────────>│               │                │               │
-      │                 │  18. POST /sessions/{id}/end   │               │
+      │  16. End call   │               │                │               │
+      │────────────────>│  POST /sessions/{id}/end       │               │
       │                 │──────────────>│                │               │
-      │                 │  19. Disconnect LiveKit         │               │
-      │                 │──────────────────────────────>│               │
 ```
-
-### Step-by-step
-
-**Page load (steps 1–3)**
-
-1. User opens the session link (`/{agentId}`) in the Session App.
-2. Session App fetches agent config from the Go API, including `session_start_input_schema`.
-3. A pre-session form is rendered (e.g. name, email, or any custom fields defined in the schema).
-
-**Session creation (steps 4–9)**
-
-4. User fills the form and clicks "Start session".
-5. Session App sends `POST /agents/{id}/sessions/start` with identity, channel (`"voice"`), and form data.
-6. Go API creates a LiveKit room with `agent_id` embedded in the room metadata.
-7. Go API generates a JWT participant token with a `RoomJoin` grant scoped to that room.
-8. Go API creates a `Session` record in Postgres with status `active` and the form data as metadata.
-9. Session App connects to LiveKit Cloud using the token over WebSocket.
-
-**Worker dispatch (steps 10–15)**
-
-10. The voice room UI appears with mic/speaker controls.
-11. LiveKit detects a participant joined and dispatches a job to the registered Python worker.
-12. Worker's `entrypoint` extracts `agent_id` from the room's metadata JSON (falls back to parsing the room name).
-13. Worker loads the full agent config (agent + all participants) from Postgres.
-14. Worker builds `BaseAgent` instances for each participant, wiring up `to_{role}` handoff tools between them.
-15. Worker starts an `AgentSession` with the entry-point agent and `openai.realtime.RealtimeModel`.
-
-**Live conversation (step 16)**
-
-16. Bidirectional WebRTC audio flows between the browser and the worker through LiveKit. The agent listens, thinks, and speaks in real time. If the LLM decides to hand off (e.g. from a greeter to a specialist), it calls the `to_{role}` tool and the next participant takes over seamlessly.
-
-**Session end (steps 17–19)**
-
-17. User clicks "End call".
-18. Session App calls `POST /sessions/{id}/end` to mark the session as ended in the database.
-19. LiveKit connection is disconnected; the worker's session terminates.
 
 ## Project Structure
 
@@ -180,7 +181,7 @@ shravann/
 │   ├── web/              # Dashboard (Next.js)
 │   │   ├── app/          # App router pages
 │   │   ├── components/   # Agent builder, session list, etc.
-│   │   └── lib/          # API client, utils
+│   │   └── lib/          # API client, user-sync
 │   │
 │   ├── session/          # Voice session UI (Next.js)
 │   │   ├── app/          # /[agentId] route
@@ -188,12 +189,13 @@ shravann/
 │   │   └── lib/          # API client
 │   │
 │   ├── api/              # REST API (Go)
-│   │   ├── cmd/server/   # Entrypoint
+│   │   ├── cmd/server/   # Entrypoint + admin seed
 │   │   └── internal/
-│   │       ├── api/      # Handlers, router
+│   │       ├── api/      # Handlers, auth, router, middleware
 │   │       ├── db/       # Models, migrations
 │   │       ├── store/    # Database access layer
 │   │       ├── livekit/  # Room creation, token generation
+│   │       ├── crypto/   # AES-256-GCM encryption for API keys
 │   │       └── config/   # Environment config
 │   │
 │   └── worker/           # Voice agent runtime (Python)
@@ -201,84 +203,53 @@ shravann/
 │       └── agent/
 │           ├── db.py     # Load agent config from Postgres
 │           ├── factory.py # Build Agent instances with handoff tools
-│           └── base.py   # BaseAgent, SessionData, handoff logic
+│           ├── base.py   # BaseAgent, SessionData, handoff logic
+│           └── crypto.py # Decrypt project API keys
 │
-├── packages/             # Shared configs (eslint, tsconfig)
-└── infra/                # Docker, Kubernetes, Terraform
+├── site/                 # Landing page (Next.js)
+├── packages/
+│   └── create-shravann/  # npx create-shravann CLI
+└── docker-compose.yaml   # Run the full stack with Docker
 ```
 
-## Running Locally
-
-### Prerequisites
-
-- Node.js 20+
-- Go 1.24+
-- Python 3.12+
-- PostgreSQL
-- A [LiveKit Cloud](https://livekit.io/) account (or self-hosted LiveKit server)
-- An [OpenAI API](https://platform.openai.com/) key
-- A [Clerk](https://clerk.com/) account (for web app auth)
-
-### 1. Database
-
-Create a Postgres database:
-
-```bash
-createdb db_shravann
-```
-
-The Go API auto-migrates tables on startup via GORM.
-
-### 2. Go API (`apps/api`)
-
-```bash
-cd apps/api
-cp .env.example .env  # fill in DATABASE_URL, LIVEKIT_*, etc.
-go run cmd/server/main.go
-```
-
-Runs on `http://localhost:8080`.
-
-### 3. Web Dashboard (`apps/web`)
-
-```bash
-cd apps/web
-pnpm install
-cp .env.example .env.local  # fill in NEXT_PUBLIC_API_URL, CLERK keys
-pnpm dev
-```
-
-Runs on `http://localhost:3000`.
-
-### 4. Session App (`apps/session`)
-
-```bash
-cd apps/session
-pnpm install
-cp .env.example .env.local  # fill in NEXT_PUBLIC_API_URL, NEXT_PUBLIC_LIVEKIT_WS_URL
-pnpm dev
-```
-
-Runs on `http://localhost:3001`.
-
-### 5. Worker (`apps/worker`)
-
-```bash
-cd apps/worker
-pip install -r requirements.txt
-cp .env.example .env  # fill in LIVEKIT_*, OPENAI_API_KEY, DATABASE_URL
-python main.py start
-```
-
-### Environment Variables
+## Environment Variables
 
 | Variable | Used by | Description |
 |----------|---------|-------------|
 | `DATABASE_URL` | api, worker | Postgres connection string |
-| `LIVEKIT_URL` | api, worker | LiveKit server URL (`wss://...`) |
+| `LIVEKIT_URL` | api, worker, session | LiveKit server URL (`wss://...`) |
 | `LIVEKIT_API_KEY` | api, worker | LiveKit API key |
 | `LIVEKIT_API_SECRET` | api, worker | LiveKit API secret |
-| `OPENAI_API_KEY` | worker | OpenAI API key (for Realtime model) |
-| `NEXT_PUBLIC_API_URL` | web, session | Go API base URL |
-| `NEXT_PUBLIC_LIVEKIT_WS_URL` | session | LiveKit WebSocket URL |
-| `NEXT_PUBLIC_CLERK_*` | web | Clerk auth keys |
+| `ENCRYPTION_KEY` | api, worker | Hex-encoded 32-byte key for encrypting API keys at rest |
+| `JWT_SECRET` | api | Secret for signing auth JWTs (random key generated if empty) |
+| `NEXT_PUBLIC_API_URL` | web, session | Go API base URL (default: `http://localhost:8080`) |
+| `NEXT_PUBLIC_SESSION_APP_URL` | web | Session app URL for "Copy link" feature |
+| `NEXT_PUBLIC_LIVEKIT_URL` | session | LiveKit WebSocket URL for client connections |
+
+Provider API keys (OpenAI, Google) are not set as environment variables. They are configured per-project in the dashboard Settings page and stored encrypted in the database.
+
+## Docker Images
+
+Pre-built images are published to DockerHub on every release:
+
+- `akshitmadan/shravann-api`
+- `akshitmadan/shravann-worker`
+- `akshitmadan/shravann-web`
+- `akshitmadan/shravann-session`
+
+## CI/CD
+
+GitHub Actions workflows run on every push/PR:
+
+| Workflow | Trigger | What it does |
+|----------|---------|-------------|
+| API CI | `apps/api/**` | `go vet`, build, test |
+| Worker CI | `apps/worker/**` | pip install, py_compile checks |
+| Web CI | `apps/web/**` | npm ci, lint, build |
+| Session CI | `apps/session/**` | npm ci, build |
+| Site CI | `site/**` | npm ci, build |
+| Docker Publish | `v*` tags | Build + push all 4 Docker images to DockerHub |
+
+## License
+
+[Apache License 2.0](LICENSE)

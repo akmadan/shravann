@@ -8,14 +8,17 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useUser } from "@clerk/nextjs";
-import { syncUser, type User } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import type { User } from "@/lib/api";
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 interface UserSyncCtx {
   backendUser: User | null;
   loading: boolean;
   error: string | null;
   retry: () => void;
+  logout: () => Promise<void>;
 }
 
 const Ctx = createContext<UserSyncCtx>({
@@ -23,6 +26,7 @@ const Ctx = createContext<UserSyncCtx>({
   loading: true,
   error: null,
   retry: () => {},
+  logout: async () => {},
 });
 
 export function useBackendUser() {
@@ -30,45 +34,48 @@ export function useBackendUser() {
 }
 
 export function UserSyncProvider({ children }: { children: ReactNode }) {
-  const { user, isLoaded } = useUser();
+  const router = useRouter();
   const [backendUser, setBackendUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const doSync = useCallback(() => {
-    if (!isLoaded || !user) return;
-
+  const fetchMe = useCallback(async () => {
     setLoading(true);
     setError(null);
-
-    const email =
-      user.primaryEmailAddress?.emailAddress ??
-      user.emailAddresses[0]?.emailAddress ??
-      "";
-    const name =
-      [user.firstName, user.lastName].filter(Boolean).join(" ") || email;
-    const avatar = user.imageUrl || undefined;
-
-    syncUser({
-      email,
-      name,
-      auth_provider: "clerk",
-      auth_provider_id: user.id,
-      avatar_url: avatar,
-    })
-      .then(setBackendUser)
-      .catch(() =>
-        setError("Could not connect to the backend. Is the API server running?")
-      )
-      .finally(() => setLoading(false));
-  }, [isLoaded, user]);
+    try {
+      const res = await fetch(`${API}/auth/me`, { credentials: "include" });
+      if (res.status === 401) {
+        router.replace("/login");
+        return;
+      }
+      if (!res.ok) throw new Error("Failed to fetch user");
+      const data = await res.json();
+      setBackendUser(data.user);
+    } catch {
+      setError("Could not connect to the backend. Is the API server running?");
+    } finally {
+      setLoading(false);
+    }
+  }, [router]);
 
   useEffect(() => {
-    doSync();
-  }, [doSync]);
+    fetchMe();
+  }, [fetchMe]);
+
+  const logout = useCallback(async () => {
+    try {
+      await fetch(`${API}/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } finally {
+      setBackendUser(null);
+      router.replace("/login");
+    }
+  }, [router]);
 
   return (
-    <Ctx.Provider value={{ backendUser, loading, error, retry: doSync }}>
+    <Ctx.Provider value={{ backendUser, loading, error, retry: fetchMe, logout }}>
       {children}
     </Ctx.Provider>
   );

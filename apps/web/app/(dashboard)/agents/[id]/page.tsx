@@ -40,7 +40,7 @@ function AgentDetailLoader() {
     Promise.all([
       getAgent(id),
       listParticipants(id),
-      listProjects(backendUser.id),
+      listProjects(),
     ])
       .then(([a, pRes, projRes]) => {
         setAgent(a);
@@ -49,7 +49,7 @@ function AgentDetailLoader() {
       })
       .catch(() => setAgent(null))
       .finally(() => setLoading(false));
-  }, [ready, backendUser, id]);
+  }, [ready, id]);
 
   if (userLoading || loading) return <Spinner />;
   if (syncError) return <SyncError />;
@@ -68,7 +68,6 @@ function AgentDetailLoader() {
         <AgentBuilder
           projects={projects}
           preselectedProject={agent.project_id}
-          userId={backendUser.id}
           agentId={agent.id}
           initialAgent={agent}
           initialParticipants={participants}

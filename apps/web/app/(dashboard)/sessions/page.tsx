@@ -26,11 +26,11 @@ export default function SessionsPage() {
     if (!ready) return;
     (async () => {
       try {
-        const { projects } = await listProjects(backendUser!.id);
+        const { projects } = await listProjects();
         const agentMap = new Map<string, string>();
         const allAgents: Agent[] = [];
         for (const p of projects ?? []) {
-          const { agents } = await listAgents(p.id, backendUser!.id);
+          const { agents } = await listAgents(p.id);
           for (const a of agents ?? []) {
             agentMap.set(a.id, a.name);
             allAgents.push(a);
@@ -61,7 +61,7 @@ export default function SessionsPage() {
         setLoading(false);
       }
     })();
-  }, [ready, backendUser]);
+  }, [ready]);
 
   if (userLoading) return <Spinner />;
   if (syncError) return <SyncError />;
