@@ -7,11 +7,13 @@ on:
 env:
   REGISTRY: docker.io
   IMAGE_PREFIX: akshitmadan/shravann
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - app: api
