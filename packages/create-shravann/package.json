@@ -9,7 +9,8 @@
   "type": "module",
   "files": [
     "index.mjs",
-    "docker-compose.yml"
+    "docker-compose.yml",
+    "README.md"
   ],
   "engines": {
     "node": ">=18"
