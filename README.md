@@ -6,7 +6,7 @@
 [![Web CI](https://github.com/akmadan/shravann/actions/workflows/web-ci.yml/badge.svg)](https://github.com/akmadan/shravann/actions/workflows/web-ci.yml)
 [![Session CI](https://github.com/akmadan/shravann/actions/workflows/session-ci.yml/badge.svg)](https://github.com/akmadan/shravann/actions/workflows/session-ci.yml)
 [![npm](https://img.shields.io/npm/v/create-shravann?label=create-shravann&color=cb3837)](https://www.npmjs.com/package/create-shravann)
-[![Docker](https://img.shields.io/docker/v/akmadan/shravann-api?label=docker&color=2496ed&sort=semver)](https://hub.docker.com/u/akmadan)
+[![Docker](https://img.shields.io/docker/v/akshitmadan/shravann-api?label=docker&color=2496ed&sort=semver)](https://hub.docker.com/u/akshitmadan)
 [![License](https://img.shields.io/github/license/akmadan/shravann)](LICENSE)
 
 **Open-source platform for building, orchestrating, and running multi-agent real-time voice AI systems.**
