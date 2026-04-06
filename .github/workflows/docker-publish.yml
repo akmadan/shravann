@@ -1,4 +1,4 @@
-name: Docker Publish
+name: Publish
 
 on:
   push:
@@ -10,6 +10,26 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  npm-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Set package version from tag
+        working-directory: packages/create-shravann
+        run: npm version "${GITHUB_REF#refs/tags/v}" --no-git-tag-version --allow-same-version
+
+      - name: Publish to npm
+        working-directory: packages/create-shravann
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
   build-and-push:
     runs-on: ubuntu-latest
     strategy:
