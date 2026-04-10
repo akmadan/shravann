@@ -40,16 +40,21 @@ Shravann provides:
 npx create-shravann
 ```
 
-The CLI checks for Docker, prompts for your LiveKit credentials, auto-generates secrets, pulls images, starts all services, and prints:
+The CLI generates secrets, pulls Docker images, and starts the core services (Postgres, API, Dashboard). No configuration needed — LiveKit credentials are configured later through the dashboard.
 
 ```
-  Dashboard       http://localhost:3000
-  Session App     http://localhost:3001
-  API             http://localhost:8080
+  Dashboard     http://localhost:3700
+  API           http://localhost:8484
 
-  Default login
-  Email:          admin@shravann.local
-  Password:       admin
+  Login
+  Email         admin@shravann.local
+  Password      admin
+```
+
+Once running, open the dashboard, go to **Settings**, configure LiveKit and your voice provider API key, then start the voice worker:
+
+```bash
+docker compose --profile voice up -d
 ```
 
 ### Or manually with Docker Compose
@@ -213,7 +218,7 @@ shravann/
 | `LIVEKIT_API_SECRET` | api, worker | LiveKit API secret |
 | `ENCRYPTION_KEY` | api, worker | 32-byte hex key for encrypting API keys at rest |
 | `JWT_SECRET` | api | Secret for signing authentication JWTs |
-| `NEXT_PUBLIC_API_URL` | web, session | Go API base URL (default `http://localhost:8080`) |
+| `NEXT_PUBLIC_API_URL` | web, session | Go API base URL (default `http://localhost:8484`) |
 | `NEXT_PUBLIC_SESSION_APP_URL` | web | Session app URL — used for "Copy session link" in the dashboard |
 | `NEXT_PUBLIC_LIVEKIT_URL` | session | LiveKit WebSocket URL for browser connections |
 

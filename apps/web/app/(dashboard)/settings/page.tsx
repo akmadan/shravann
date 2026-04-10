@@ -11,6 +11,10 @@ import {
   EyeOff,
   Loader2,
   Lock,
+  Radio,
+  Copy,
+  CheckCircle2,
+  Terminal,
 } from "lucide-react";
 import {
   listProjects,
@@ -313,6 +317,145 @@ function ChangePasswordSection() {
   );
 }
 
+function LiveKitSetupSection() {
+  const [livekitUrl, setLivekitUrl] = useState("");
+  const [livekitApiKey, setLivekitApiKey] = useState("");
+  const [livekitApiSecret, setLivekitApiSecret] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [showSecrets, setShowSecrets] = useState(false);
+
+  const allFilled =
+    livekitUrl.trim() && livekitApiKey.trim() && livekitApiSecret.trim();
+
+  const envSnippet = [
+    `LIVEKIT_URL=${livekitUrl.trim()}`,
+    `LIVEKIT_API_KEY=${livekitApiKey.trim()}`,
+    `LIVEKIT_API_SECRET=${livekitApiSecret.trim()}`,
+  ].join("\n");
+
+  const fullCommand = allFilled
+    ? `# Add to your .env file:\n${envSnippet}\n\n# Then start the voice worker:\ndocker compose --profile voice up -d`
+    : "";
+
+  const handleCopy = async () => {
+    if (!fullCommand) return;
+    await navigator.clipboard.writeText(fullCommand);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Radio size={16} className="text-[#71717a]" />
+        <h2 className="text-sm font-medium text-white">
+          LiveKit Configuration
+        </h2>
+      </div>
+
+      <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-5 space-y-4">
+        <p className="text-xs text-[#71717a]">
+          LiveKit provides the real-time WebRTC transport for voice sessions.
+          Get credentials at{" "}
+          <a
+            href="https://livekit.io/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-400 hover:underline"
+          >
+            livekit.io
+          </a>{" "}
+          (free tier available). After entering your credentials, copy the
+          generated command below.
+        </p>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-[#a1a1aa]">
+              LiveKit URL
+            </label>
+            <input
+              type="text"
+              value={livekitUrl}
+              onChange={(e) => setLivekitUrl(e.target.value)}
+              placeholder="wss://your-project.livekit.cloud"
+              className="w-full rounded-md border border-white/[0.08] bg-white/[0.02] px-3 py-2 font-mono text-xs text-white placeholder-[#3f3f46] outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-[#a1a1aa]">
+                API Key
+              </label>
+              <input
+                type="text"
+                value={livekitApiKey}
+                onChange={(e) => setLivekitApiKey(e.target.value)}
+                placeholder="APIxxxxxxxx"
+                className="w-full rounded-md border border-white/[0.08] bg-white/[0.02] px-3 py-2 font-mono text-xs text-white placeholder-[#3f3f46] outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-xs font-medium text-[#a1a1aa]">
+                API Secret
+              </label>
+              <div className="relative">
+                <input
+                  type={showSecrets ? "text" : "password"}
+                  value={livekitApiSecret}
+                  onChange={(e) => setLivekitApiSecret(e.target.value)}
+                  placeholder="••••••••••••"
+                  className="w-full rounded-md border border-white/[0.08] bg-white/[0.02] px-3 py-2 pr-10 font-mono text-xs text-white placeholder-[#3f3f46] outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSecrets(!showSecrets)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#52525b] hover:text-[#71717a]"
+                >
+                  {showSecrets ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {allFilled && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Terminal size={13} className="text-[#52525b]" />
+                <span className="text-xs font-medium text-[#71717a]">
+                  Setup command
+                </span>
+              </div>
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs text-[#71717a] transition-colors hover:bg-white/[0.04] hover:text-white"
+              >
+                {copied ? (
+                  <>
+                    <CheckCircle2 size={12} className="text-emerald-400" />
+                    <span className="text-emerald-400">Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={12} />
+                    Copy
+                  </>
+                )}
+              </button>
+            </div>
+            <pre className="overflow-x-auto rounded-md border border-white/[0.06] bg-black/40 p-3 font-mono text-xs leading-relaxed text-[#a1a1aa]">
+              {fullCommand}
+            </pre>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { backendUser, userLoading, syncError, ready } = usePageReady();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -400,9 +543,11 @@ export default function SettingsPage() {
           Settings
         </h1>
         <p className="mt-1 text-sm text-[#71717a]">
-          Manage API keys for your AI providers. Keys are encrypted at rest.
+          Configure LiveKit for voice transport and manage provider API keys.
         </p>
       </div>
+
+      <LiveKitSetupSection />
 
       {error && (
         <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">

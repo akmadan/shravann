@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: db_shravann
     ports:
-      - "5432:5432"
+      - "5488:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +20,7 @@ services:
     image: akshitmadan/shravann-api:latest
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8484:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -36,6 +36,7 @@ services:
   worker:
     image: akshitmadan/shravann-worker:latest
     restart: unless-stopped
+    profiles: ["voice"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,22 +51,23 @@ services:
     image: akshitmadan/shravann-web:latest
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3700:3000"
     depends_on:
       - api
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8080
-      NEXT_PUBLIC_SESSION_APP_URL: http://localhost:3001
+      NEXT_PUBLIC_API_URL: http://localhost:8484
+      NEXT_PUBLIC_SESSION_APP_URL: http://localhost:3701
 
   session:
     image: akshitmadan/shravann-session:latest
     restart: unless-stopped
+    profiles: ["voice"]
     ports:
-      - "3001:3000"
+      - "3701:3000"
     depends_on:
       - api
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8080
+      NEXT_PUBLIC_API_URL: http://localhost:8484
       NEXT_PUBLIC_LIVEKIT_URL: ${LIVEKIT_URL:-}
 
 volumes:

@@ -1,162 +1,208 @@
 #!/usr/bin/env node
 
 import { execSync, spawn } from "node:child_process";
-import { createInterface } from "node:readline";
-import { writeFileSync, readFileSync, existsSync, copyFileSync } from "node:fs";
+import { writeFileSync, existsSync, copyFileSync, mkdirSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { homedir } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const BLUE = "\x1b[34m";
-const GREEN = "\x1b[32m";
-const YELLOW = "\x1b[33m";
-const DIM = "\x1b[2m";
-const BOLD = "\x1b[1m";
-const RESET = "\x1b[0m";
+const SHRAVANN_HOME =
+  process.env.SHRAVANN_HOME || join(homedir(), ".shravann");
+
+const c = {
+  reset: "\x1b[0m",
+  bold: "\x1b[1m",
+  dim: "\x1b[2m",
+  green: "\x1b[32m",
+  blue: "\x1b[34m",
+  yellow: "\x1b[33m",
+  cyan: "\x1b[36m",
+  red: "\x1b[31m",
+};
+
+const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+function write(text) {
+  process.stdout.write(text);
+}
+
+function clearLine() {
+  write("\x1b[2K\r");
+}
 
 function banner() {
   console.log(`
-${BLUE}${BOLD}  ____  _                                       
- / ___|| |__  _ __ __ ___   ____ _ _ __  _ __  
- \\___ \\| '_ \\| '__/ _\` \\ \\ / / _\` | '_ \\| '_ \\ 
-  ___) | | | | | | (_| |\\ V / (_| | | | | | | |
- |____/|_| |_|_|  \\__,_| \\_/ \\__,_|_| |_|_| |_|${RESET}
-
-${DIM}  Multi-agent voice AI platform${RESET}
+${c.blue}${c.bold}  shravann${c.reset} ${c.dim}— multi-agent voice AI platform${c.reset}
 `);
 }
 
-function rl() {
-  return createInterface({ input: process.stdin, output: process.stdout });
+function ok(msg) {
+  console.log(`  ${c.green}✔${c.reset} ${msg}`);
 }
 
-function ask(prompt, fallback) {
-  return new Promise((resolve) => {
-    const r = rl();
-    const suffix = fallback ? ` ${DIM}(${fallback})${RESET}` : "";
-    r.question(`  ${prompt}${suffix}: `, (answer) => {
-      r.close();
-      resolve(answer.trim() || fallback || "");
-    });
+function warn(msg) {
+  console.log(`  ${c.yellow}!${c.reset} ${c.dim}${msg}${c.reset}`);
+}
+
+function fail(msg) {
+  console.log(`  ${c.red}✘${c.reset} ${msg}`);
+}
+
+function info(msg) {
+  console.log(`  ${c.dim}${msg}${c.reset}`);
+}
+
+async function spin(label, fn) {
+  let i = 0;
+  const timer = setInterval(() => {
+    clearLine();
+    write(
+      `  ${c.cyan}${frames[i++ % frames.length]}${c.reset} ${c.dim}${label}${c.reset}`
+    );
+  }, 80);
+
+  try {
+    const result = await fn();
+    clearInterval(timer);
+    clearLine();
+    ok(label);
+    return result;
+  } catch (err) {
+    clearInterval(timer);
+    clearLine();
+    fail(label);
+    throw err;
+  }
+}
+
+function exec(cmd, cwd) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("sh", ["-c", cmd], { stdio: "pipe", cwd });
+    let out = "";
+    child.stdout.on("data", (d) => (out += d));
+    child.stderr.on("data", (d) => (out += d));
+    child.on("close", (code) =>
+      code === 0
+        ? resolve(out)
+        : reject(new Error(out.trim() || `exit ${code}`))
+    );
   });
 }
 
-function randomHex(bytes) {
-  return randomBytes(bytes).toString("hex");
+function dc(args) {
+  return exec(`docker compose ${args}`, SHRAVANN_HOME);
 }
 
-function dockerAvailable() {
-  try {
-    execSync("docker compose version", { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
+async function waitForHealth(url, retries = 40, interval = 1500) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return true;
+    } catch {}
+    await new Promise((r) => setTimeout(r, interval));
   }
+  return false;
 }
 
 async function main() {
   banner();
 
-  if (!dockerAvailable()) {
-    console.error(
-      `${YELLOW}  Docker with Compose plugin is required but was not found.${RESET}\n` +
-        `  Install Docker Desktop: https://docs.docker.com/get-docker/\n`
+  // Check Docker
+  try {
+    execSync("docker compose version", { stdio: "ignore" });
+  } catch {
+    fail("Docker with Compose plugin not found");
+    console.log(
+      `\n  ${c.dim}Install Docker Desktop: https://docs.docker.com/get-docker/${c.reset}\n`
     );
     process.exit(1);
   }
+  ok("Docker detected");
 
-  console.log(`${BOLD}  Configuration${RESET}\n`);
-  console.log(
-    `${DIM}  LiveKit credentials are required for voice sessions.${RESET}`
-  );
-  console.log(
-    `${DIM}  Get a free account at https://livekit.io/${RESET}\n`
-  );
+  // Create ~/.shravann
+  mkdirSync(SHRAVANN_HOME, { recursive: true });
+  info(`Home: ${SHRAVANN_HOME}`);
 
-  const livekitUrl = await ask("LiveKit URL", "wss://your-project.livekit.cloud");
-  const livekitKey = await ask("LiveKit API Key");
-  const livekitSecret = await ask("LiveKit API Secret");
+  // Generate .env (skip if already exists — idempotent)
+  const envPath = join(SHRAVANN_HOME, ".env");
+  if (existsSync(envPath)) {
+    ok("Existing configuration found");
+  } else {
+    const encryptionKey = randomBytes(32).toString("hex");
+    const jwtSecret = randomBytes(32).toString("hex");
 
-  const encryptionKey = randomHex(32);
-  const jwtSecret = randomHex(32);
+    const envContent = [
+      "# Generated by create-shravann",
+      `ENCRYPTION_KEY=${encryptionKey}`,
+      `JWT_SECRET=${jwtSecret}`,
+      "",
+      "# LiveKit — configure in the dashboard Settings page,",
+      "# then run: cd ~/.shravann && docker compose --profile voice up -d",
+      "LIVEKIT_URL=",
+      "LIVEKIT_API_KEY=",
+      "LIVEKIT_API_SECRET=",
+      "",
+    ].join("\n");
 
-  console.log(
-    `\n${DIM}  Auto-generated ENCRYPTION_KEY and JWT_SECRET.${RESET}\n`
-  );
+    writeFileSync(envPath, envContent);
+    ok("Generated secrets");
+  }
 
-  const envContent = [
-    "# Generated by create-shravann",
-    `LIVEKIT_URL=${livekitUrl}`,
-    `LIVEKIT_API_KEY=${livekitKey}`,
-    `LIVEKIT_API_SECRET=${livekitSecret}`,
-    `ENCRYPTION_KEY=${encryptionKey}`,
-    `JWT_SECRET=${jwtSecret}`,
-    "",
-  ].join("\n");
-
-  writeFileSync(".env", envContent);
-  console.log(`  ${GREEN}Created .env${RESET}`);
-
+  // Copy docker-compose.yml (always overwrite to pick up version updates)
   const composeSrc = join(__dirname, "docker-compose.yml");
-  if (!existsSync("docker-compose.yml")) {
-    copyFileSync(composeSrc, "docker-compose.yml");
-    console.log(`  ${GREEN}Created docker-compose.yml${RESET}`);
-  }
+  const composeDst = join(SHRAVANN_HOME, "docker-compose.yml");
+  copyFileSync(composeSrc, composeDst);
 
-  console.log(`\n${BOLD}  Starting services...${RESET}\n`);
+  // Tear down stale state
+  try {
+    await dc("down --remove-orphans 2>/dev/null");
+  } catch {}
 
-  const dc = spawn("docker", ["compose", "up", "-d", "--pull", "always"], {
-    stdio: "inherit",
-  });
+  // Pull + start
+  await spin("Pulling images", () => dc("pull"));
+  await spin("Starting postgres", () => dc("up -d postgres && sleep 2"));
+  await spin("Starting API", () => dc("up -d api"));
+  await spin("Starting dashboard", () => dc("up -d web"));
 
-  await new Promise((resolve, reject) => {
-    dc.on("close", (code) => (code === 0 ? resolve() : reject(code)));
-  });
+  // Wait for API
+  const healthy = await spin("Waiting for API health check", () =>
+    waitForHealth("http://localhost:8484/health")
+  );
 
-  console.log(`\n${BOLD}  Waiting for API to be ready...${RESET}`);
-
-  let ready = false;
-  for (let i = 0; i < 30; i++) {
-    try {
-      const res = await fetch("http://localhost:8080/health");
-      if (res.ok) {
-        ready = true;
-        break;
-      }
-    } catch {}
-    await new Promise((r) => setTimeout(r, 2000));
-    process.stdout.write(".");
-  }
-  console.log("");
-
-  if (!ready) {
-    console.log(
-      `\n${YELLOW}  API is taking longer than expected. Check logs with: docker compose logs api${RESET}`
-    );
+  if (!healthy) {
+    warn("API is slow to start — check: cd ~/.shravann && docker compose logs api");
   }
 
   console.log(`
-${GREEN}${BOLD}  Shravann is running!${RESET}
+  ${c.green}${c.bold}Ready.${c.reset}
 
-  ${BOLD}Dashboard${RESET}       http://localhost:3000
-  ${BOLD}Session App${RESET}     http://localhost:3001
-  ${BOLD}API${RESET}             http://localhost:8080
+  ${c.bold}Dashboard${c.reset}     ${c.cyan}http://localhost:3700${c.reset}
+  ${c.bold}API${c.reset}           ${c.cyan}http://localhost:8484${c.reset}
 
-  ${BOLD}Default login${RESET}
-  Email:          admin@shravann.local
-  Password:       admin
-  ${DIM}(You will be asked to change it on first login)${RESET}
+  ${c.bold}Login${c.reset}
+  Email         admin@shravann.local
+  Password      admin
+  ${c.dim}(you must change the password on first login)${c.reset}
 
-  ${DIM}Useful commands:${RESET}
-    docker compose logs -f      ${DIM}# follow logs${RESET}
-    docker compose down          ${DIM}# stop all services${RESET}
-    docker compose down -v       ${DIM}# stop and remove data${RESET}
+  ${c.yellow}${c.bold}Next step${c.reset}
+  Open the dashboard → ${c.bold}Settings${c.reset} → configure LiveKit credentials
+  and your voice provider API key. Then start the voice worker:
+
+    ${c.cyan}cd ~/.shravann && docker compose --profile voice up -d${c.reset}
+
+  ${c.dim}Config & data:  ${SHRAVANN_HOME}${c.reset}
+  ${c.dim}Useful commands:${c.reset}
+    cd ~/.shravann
+    docker compose logs -f                ${c.dim}# follow logs${c.reset}
+    docker compose --profile voice up -d  ${c.dim}# start voice worker${c.reset}
+    docker compose down                   ${c.dim}# stop everything${c.reset}
 `);
 }
 
 main().catch((err) => {
-  console.error(err);
+  console.error(`\n  ${c.red}Error:${c.reset} ${err.message}\n`);
   process.exit(1);
 });

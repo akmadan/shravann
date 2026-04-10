@@ -17,13 +17,13 @@ services:
     build:
       context: ./apps/web
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:8080
-        NEXT_PUBLIC_SESSION_APP_URL: http://localhost:3001
+        NEXT_PUBLIC_API_URL: http://localhost:8484
+        NEXT_PUBLIC_SESSION_APP_URL: http://localhost:3701
 
   session:
     image: shravann-session:dev
     build:
       context: ./apps/session
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:8080
+        NEXT_PUBLIC_API_URL: http://localhost:8484
         NEXT_PUBLIC_LIVEKIT_URL: ${LIVEKIT_URL:-ws://localhost:7880}
