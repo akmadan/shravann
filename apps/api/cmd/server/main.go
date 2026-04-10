@@ -37,6 +37,26 @@ func main() {
 		log.Fatalf("database ping: %v", err)
 	}
 
+	if err := gormDB.Exec(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`).Error; err != nil {
+		log.Printf("pgcrypto: %v (gen_random_uuid may not work)", err)
+	}
+	if err := gormDB.AutoMigrate(
+		&db.User{},
+		&db.Project{},
+		&db.ProjectMember{},
+		&db.ProjectAPIKey{},
+		&db.Agent{},
+		&db.AgentParticipant{},
+		&db.AgentParticipantParent{},
+		&db.Form{},
+		&db.FormField{},
+		&db.Session{},
+		&db.SessionTranscript{},
+	); err != nil {
+		log.Fatalf("auto-migrate: %v", err)
+	}
+	log.Println("database: schema migrated")
+
 	var lkClient *lk.Client
 	if cfg.LiveKitURL != "" && cfg.LiveKitAPIKey != "" && cfg.LiveKitAPISecret != "" {
 		lkClient = lk.NewClient(lk.Config{
