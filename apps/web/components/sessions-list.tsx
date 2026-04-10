@@ -38,12 +38,18 @@ export default function SessionsList({ agentId }: { agentId: string }) {
 
   useEffect(() => {
     if (!agentId) return;
-    setLoading(true);
-    setError(null);
+    let cancelled = false;
     listSessions(agentId, { limit: 20 })
-      .then((res) => setSessions(res.sessions ?? []))
-      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
-      .finally(() => setLoading(false));
+      .then((res) => {
+        if (!cancelled) setSessions(res.sessions ?? []);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [agentId]);
 
   if (loading) {

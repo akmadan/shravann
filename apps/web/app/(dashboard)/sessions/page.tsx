@@ -17,7 +17,7 @@ interface SessionWithAgent extends Session {
 }
 
 export default function SessionsPage() {
-  const { backendUser, userLoading, syncError, ready } = usePageReady();
+  const { userLoading, syncError, ready } = usePageReady();
   const [sessions, setSessions] = useState<SessionWithAgent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

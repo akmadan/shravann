@@ -457,7 +457,7 @@ function LiveKitSetupSection() {
 }
 
 export default function SettingsPage() {
-  const { backendUser, userLoading, syncError, ready } = usePageReady();
+  const { userLoading, syncError, ready } = usePageReady();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [apiKeys, setApiKeys] = useState<APIKeyEntry[]>([]);

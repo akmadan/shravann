@@ -529,7 +529,7 @@ function AgentBuilderInner({
   const [sharedContext, setSharedContext] = useState(
     () => initialAgent?.system_prompt ?? ""
   );
-  const [language, setLanguage] = useState("en");
+  const [language] = useState("en");
   const [provider, setProvider] = useState<AgentProvider>(() => {
     const m = initialAgent?.model ?? "openai";
     return m === "google" ? "google" : "openai";
